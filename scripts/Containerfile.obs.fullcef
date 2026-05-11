@@ -1,0 +1,140 @@
+# OBS Studio with FULL CEF browser panels (Custom Browser Docks enabled).
+#
+# Why this exists:
+#   The official Ubuntu obsproject PPA ships obs-browser with browser
+#   *source* support but with browser *panels* (Custom Browser Docks)
+#   disabled at compile time. That blocks the "Spark Libre as embedded
+#   OBS dock" UX. This Containerfile rebuilds the obs-browser plugin
+#   against an upstream CEF binary distribution with panel support ON,
+#   then drops the resulting .so over the PPA's stock plugin.
+#
+# Trade-offs:
+#   * Image is ~600 MB larger (CEF runtime is fat).
+#   * First build takes ~8-12 min on a modern laptop.
+#   * Locked to a specific CEF version; bump CEF_VERSION when upstream
+#     ABI changes.
+#
+# Use it via:
+#   FULL_CEF=1 ./start.sh up
+
+ARG CEF_VERSION=127.3.5+gd7a4e36+chromium-127.0.6533.120
+
+FROM ubuntu:24.04 AS builder
+
+ENV DEBIAN_FRONTEND=noninteractive
+ARG CEF_VERSION
+
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends \
+        build-essential cmake ninja-build pkg-config \
+        git ca-certificates wget bzip2 \
+        software-properties-common gnupg \
+        qt6-base-dev qt6-base-private-dev qt6-tools-dev \
+        libqt6svg6-dev \
+        nlohmann-json3-dev \
+        libcurl4-openssl-dev \
+        libx11-dev libxcomposite-dev libxdamage-dev libxrandr-dev \
+    && add-apt-repository -y ppa:obsproject/obs-studio \
+    && apt-get update \
+    && apt-get install -y --no-install-recommends libobs-dev obs-studio \
+    && rm -rf /var/lib/apt/lists/*
+
+# Fetch upstream CEF binary distribution. The "minimal" archive omits
+# the sample apps but keeps everything obs-browser links against.
+RUN set -eux; \
+    cef_dir="cef_binary_${CEF_VERSION}_linux64"; \
+    safe="${CEF_VERSION//+/%2B}"; \
+    wget --tries=3 --timeout=60 -q -O /tmp/cef.tar.bz2 \
+        "https://cef-builds.spotifycdn.com/cef_binary_${safe}_linux64_minimal.tar.bz2"; \
+    mkdir -p /opt; \
+    tar -xjf /tmp/cef.tar.bz2 -C /opt; \
+    mv "/opt/${cef_dir}_minimal" /opt/cef 2>/dev/null \
+        || mv "/opt/${cef_dir}" /opt/cef; \
+    rm -f /tmp/cef.tar.bz2; \
+    # CEF ships libcef_dll as static; we need the wrapper compiled.
+    cmake -S /opt/cef -B /opt/cef/build -G Ninja \
+        -DCMAKE_BUILD_TYPE=Release; \
+    ninja -C /opt/cef/build libcef_dll_wrapper
+
+# Build obs-browser with panels enabled.
+RUN git clone --depth 1 --branch master \
+        https://github.com/obsproject/obs-browser.git /src/obs-browser \
+    && cmake -S /src/obs-browser -B /src/obs-browser/build -G Ninja \
+        -DCEF_ROOT_DIR=/opt/cef \
+        -DBROWSER_PANEL_SUPPORT_ENABLED=ON \
+        -DENABLE_BROWSER=ON \
+        -DCMAKE_BUILD_TYPE=Release \
+        -DCMAKE_INSTALL_PREFIX=/usr \
+    && ninja -C /src/obs-browser/build
+
+# ----- runtime -------------------------------------------------------------
+
+FROM ubuntu:24.04 AS runtime
+
+ENV DEBIAN_FRONTEND=noninteractive
+
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends \
+        software-properties-common gnupg ca-certificates wget \
+    && add-apt-repository -y ppa:obsproject/obs-studio \
+    && apt-get update \
+    && apt-get install -y --no-install-recommends \
+        obs-studio \
+        libgl1 libegl1 libglx-mesa0 libgles2 \
+        mesa-vulkan-drivers mesa-va-drivers \
+        libva2 va-driver-all \
+        pipewire pipewire-pulse pulseaudio-utils \
+        libasound2t64 libasound2-plugins \
+        v4l-utils \
+        libwayland-client0 libwayland-cursor0 libwayland-egl1 \
+        libxkbcommon0 libxkbcommon-x11-0 \
+        libqt6waylandclient6 libqt6svg6 \
+        xdg-desktop-portal dbus-user-session locales \
+        procps iproute2 \
+    && locale-gen en_US.UTF-8 C.UTF-8 \
+    && apt-get purge -y software-properties-common gnupg wget \
+    && apt-get autoremove -y \
+    && rm -rf /var/lib/apt/lists/*
+
+# Replace the PPA's panel-less obs-browser with our build.
+COPY --from=builder /opt/cef /opt/cef
+COPY --from=builder /src/obs-browser/build/obs-browser.so \
+        /usr/lib/x86_64-linux-gnu/obs-plugins/obs-browser.so
+COPY --from=builder /src/obs-browser/build/obs-browser-page \
+        /usr/lib/x86_64-linux-gnu/obs-plugins/obs-browser-page
+
+# Match host UID/GID 1000 by default (override with build args).
+ARG UID=1000
+ARG GID=1000
+RUN set -eux; \
+    if id -u "${UID}" >/dev/null 2>&1; then \
+        userdel -f "$(id -un ${UID})" 2>/dev/null || true; \
+    fi; \
+    if getent group "${GID}" >/dev/null 2>&1; then \
+        groupdel "$(getent group ${GID} | cut -d: -f1)" 2>/dev/null || true; \
+    fi; \
+    groupadd -g "${GID}" obs; \
+    useradd -u "${UID}" -g "${GID}" -d /portable -s /bin/bash -M obs; \
+    mkdir -p /portable "/run/user/${UID}"; \
+    chown "${UID}:${GID}" /portable "/run/user/${UID}"; \
+    chmod 700 "/run/user/${UID}"
+
+ENV QT_X11_NO_MITSHM=1 \
+    QT_QPA_PLATFORM="wayland;xcb" \
+    GDK_BACKEND=wayland,x11 \
+    XDG_SESSION_TYPE=wayland \
+    LANG=C.UTF-8 \
+    LC_ALL=C.UTF-8 \
+    HOME=/portable \
+    XDG_CONFIG_HOME=/portable/config \
+    XDG_CACHE_HOME=/portable/cache \
+    XDG_DATA_HOME=/portable/data \
+    XDG_STATE_HOME=/portable/state
+
+WORKDIR /portable
+VOLUME ["/portable"]
+
+USER obs
+
+ENTRYPOINT ["obs"]
+CMD ["--portable", "--multi", "--minimize-to-tray=false"]

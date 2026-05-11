@@ -1,0 +1,51 @@
+# Builder image for the obs-spark-libre native plugin (Linux x86_64).
+#
+# Why a dedicated container:
+#   * The plugin sources live under ./plugin/. We need libobs-dev,
+#     obs-frontend-api headers, Qt6 + Qt6-WebEngine dev headers, and a
+#     working CMake + Ninja toolchain — none of which we want to install
+#     on the host.
+#   * Iterating in a container also matches the principle: the host OBS
+#     install is NEVER touched.
+#
+# Outputs:
+#   /out/obs-spark-libre.so          — the plugin shared object
+#   /out/data/locale/en-US.ini       — plugin localization bundle
+#
+# Use via `./start.sh plugin-build`, which mounts ./plugin as /src and
+# ./.portable-obs/plugins/64bit as /out so the OBS container picks up
+# the new build on its next launch.
+
+FROM ubuntu:24.04
+
+ENV DEBIAN_FRONTEND=noninteractive
+
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends \
+        build-essential cmake ninja-build pkg-config \
+        software-properties-common gnupg ca-certificates \
+        qt6-base-dev qt6-base-private-dev qt6-tools-dev \
+        qt6-webengine-dev qt6-webengine-dev-tools \
+        libqt6svg6-dev \
+        nlohmann-json3-dev \
+    && add-apt-repository -y ppa:obsproject/obs-studio \
+    && apt-get update \
+    && apt-get install -y --no-install-recommends libobs-dev \
+    && rm -rf /var/lib/apt/lists/*
+
+WORKDIR /src
+
+# Build entry point. We mount /src (project plugin/ dir) read-only and
+# /out (target plugins dir on host) read-write at run time. CMake needs
+# a writable build dir, so we copy the sources to /tmp/src first.
+ENTRYPOINT ["/bin/bash", "-euxo", "pipefail", "-c", "\
+  rm -rf /tmp/src && cp -r /src /tmp/src && \
+  cmake -S /tmp/src -B /tmp/src/build -G Ninja \
+      -DCMAKE_BUILD_TYPE=Release \
+      -DPORTABLE_LAYOUT=ON \
+      -DSPARK_WITH_WEBENGINE=${SPARK_WITH_WEBENGINE:-OFF} && \
+  cmake --build /tmp/src/build --parallel && \
+  mkdir -p /out && \
+  cp /tmp/src/build/portable/plugins/64bit/obs-spark-libre.so /out/ && \
+  echo \"OK plugin built (WebEngine=${SPARK_WITH_WEBENGINE:-OFF}) -> /out/obs-spark-libre.so\" \
+"]

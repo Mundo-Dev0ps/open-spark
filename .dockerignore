@@ -1,0 +1,39 @@
+.git
+.gitignore
+.github
+.venv
+venv
+env
+__pycache__
+*.pyc
+*.pyo
+*.pyd
+.pytest_cache
+.ruff_cache
+.mypy_cache
+.coverage
+htmlcov
+build
+dist
+*.egg-info
+
+# Local-only / host-state
+.portable-obs
+.data
+*.log
+
+# Secrets — never ship into image. compose.yaml passes vars at runtime.
+.env
+.env.*
+!.env.example
+!.env.compose.example
+
+# Editor
+.vscode
+.idea
+*.swp
+.DS_Store
+Thumbs.db
+
+# Docs not needed at runtime
+docs

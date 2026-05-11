@@ -1,0 +1,82 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Spark Libre</title>
+<link rel="stylesheet" href="style.css" />
+</head>
+<body>
+<header class="topbar">
+  <h1>Spark Libre</h1>
+  <nav>
+    <a href="./" class="active">Generate</a>
+    <a href="settings.html">Settings</a>
+  </nav>
+  <div id="status" class="status" aria-live="polite">…</div>
+</header>
+
+<main class="grid">
+  <section class="card">
+    <h2>Describe your overlay</h2>
+    <textarea id="prompt" rows="6" placeholder="A neon countdown timer for 5 minutes with a glowing progress bar"></textarea>
+    <label class="row">
+      <span>Style</span>
+      <select id="style">
+        <option value="">(none — use prompt only)</option>
+      </select>
+    </label>
+    <label class="row">
+      <span>Title (optional)</span>
+      <input id="title" type="text" placeholder="my-timer" />
+    </label>
+    <div class="row">
+      <label><span>Width</span><input id="width" type="number" value="1920" min="1" max="7680"/></label>
+      <label><span>Height</span><input id="height" type="number" value="1080" min="1" max="4320"/></label>
+    </div>
+    <div class="row actions">
+      <button id="generate" type="button">Generate</button>
+      <button id="inject" type="button" disabled>Inject into OBS</button>
+    </div>
+    <p id="meta" class="meta"></p>
+  </section>
+
+  <section class="card preview">
+    <h2>Preview</h2>
+    <iframe id="preview" title="overlay preview" sandbox="allow-scripts"></iframe>
+  </section>
+
+  <section class="card overlays">
+    <div class="overlays-header">
+      <h2>Overlays</h2>
+      <button id="delete-all-overlays" class="secondary danger" type="button" title="Delete every overlay (HTML files + index)">Delete all</button>
+    </div>
+    <ul id="overlay-list"></ul>
+  </section>
+
+  <section class="card scene-template">
+    <h2>Generate scene <small>(multi-source layout)</small></h2>
+    <p class="hint">One prompt → an entire scene with several positioned Browser Sources (background, chat, alerts, counter, etc.).</p>
+    <textarea id="scene-prompt" rows="4" placeholder="Anime kawaii streaming setup: magenta neon webcam frame bottom-right, glassmorphism chat box on the left, top banner with stream title, scrolling ticker at the bottom"></textarea>
+    <div class="row">
+      <label><span>Style</span>
+        <select id="scene-style">
+          <option value="">(none — use prompt only)</option>
+        </select>
+      </label>
+      <label><span>Scene name (optional)</span><input id="scene-name" type="text" placeholder="(use LLM-suggested)" /></label>
+      <label><span>Width</span><input id="scene-width" type="number" value="1920" min="1" max="7680"/></label>
+      <label><span>Height</span><input id="scene-height" type="number" value="1080" min="1" max="4320"/></label>
+      <label class="checkbox"><input id="scene-replace" type="checkbox" /><span>Replace existing scene items</span></label>
+    </div>
+    <div class="row actions">
+      <button id="scene-generate" type="button">Generate scene</button>
+    </div>
+    <p id="scene-meta" class="meta"></p>
+    <ul id="scene-sources"></ul>
+  </section>
+</main>
+
+<script src="app.js"></script>
+</body>
+</html>

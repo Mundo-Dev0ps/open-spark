@@ -1,0 +1,42 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.egg-info/
+*.egg
+.eggs/
+build/
+dist/
+.venv/
+venv/
+env/
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+.coverage
+htmlcov/
+
+# Spark Libre runtime
+config.json
+overlays_data/
+*.log
+spark-libre.sock
+
+# Docker compose dev state
+.data/
+.portable-obs/
+
+# Secrets
+.env
+.env.*
+!.env.example
+!.env.compose.example
+
+# Editor
+.vscode/
+.idea/
+*.swp
+.DS_Store
+
+# OS
+Thumbs.db

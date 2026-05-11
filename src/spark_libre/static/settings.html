@@ -1,0 +1,79 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Spark Libre · Settings</title>
+<link rel="stylesheet" href="style.css" />
+</head>
+<body>
+<header class="topbar">
+  <h1>Spark Libre</h1>
+  <nav>
+    <a href="./">Generate</a>
+    <a href="settings.html" class="active">Settings</a>
+  </nav>
+  <div id="status" class="status">…</div>
+</header>
+
+<main class="grid">
+  <section class="card">
+    <h2>LLM</h2>
+    <label class="row">
+      <span>Provider</span>
+      <select id="provider">
+        <option value="anthropic">Anthropic</option>
+        <option value="openai">OpenAI</option>
+        <option value="gemini">Gemini</option>
+        <option value="groq">Groq</option>
+        <option value="mistral">Mistral</option>
+        <option value="cohere">Cohere</option>
+        <option value="deepseek">DeepSeek</option>
+        <option value="ollama">Ollama (local)</option>
+      </select>
+    </label>
+    <label class="row">
+      <span>Model</span>
+      <input id="model" type="text" placeholder="claude-sonnet-4-6" />
+    </label>
+    <label class="row">
+      <span>API key</span>
+      <input id="api-key" type="password" placeholder="sk-..." autocomplete="off" />
+    </label>
+    <label class="row">
+      <span>Base URL (Ollama / vLLM / LM Studio)</span>
+      <input id="base-url" type="text" placeholder="http://127.0.0.1:11434" />
+    </label>
+    <div class="row actions">
+      <button id="save-llm" type="button">Save LLM settings</button>
+    </div>
+    <p id="providers-with-key" class="meta"></p>
+  </section>
+
+  <section class="card">
+    <h2>OBS WebSocket</h2>
+    <label class="row">
+      <span>Host</span>
+      <input id="obs-host" type="text" value="127.0.0.1" />
+    </label>
+    <label class="row">
+      <span>Port</span>
+      <input id="obs-port" type="number" value="4455" />
+    </label>
+    <label class="row">
+      <span>Password</span>
+      <input id="obs-password" type="password" autocomplete="off" />
+    </label>
+    <label class="row">
+      <span>Default scene name</span>
+      <input id="obs-scene" type="text" value="Spark Libre" />
+    </label>
+    <div class="row actions">
+      <button id="save-obs" type="button">Save OBS settings</button>
+    </div>
+  </section>
+</main>
+
+<script src="settings.js"></script>
+</body>
+</html>

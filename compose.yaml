@@ -1,0 +1,156 @@
+# Spark Libre — local TEST stack. Not production.
+#
+# Two services:
+#   backend  — FastAPI app on 127.0.0.1:8765 (Custom Browser Dock target)
+#   obs      — OBS Studio in container, GUI passthrough to host display
+#
+# Both use network_mode: host so:
+#   - backend can bind to 127.0.0.1:8765 (Settings.bind_address() rule)
+#   - backend reaches obs-websocket on 127.0.0.1:4455
+#   - your existing host OBS is left alone (different process, port may
+#     conflict — stop host OBS or change SPARK_OBS_PORT)
+#
+# Secrets come from .env (gitignored). We never mount your real keyring.
+#
+# Quickstart:
+#   cp .env.compose.example .env
+#   # fill SPARK_OBS_PASSWORD and one *_API_KEY
+#   docker compose up --build
+#   xdg-open http://127.0.0.1:8765
+
+services:
+  backend:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: runtime
+      args:
+        UID: ${HOST_UID:-1000}
+        GID: ${HOST_GID:-1000}
+    image: spark-libre/backend:dev
+    container_name: spark-libre-backend
+    # Match host UID so the bind-mounted .data/ is writable from the
+    # container.
+    user: "${HOST_UID:-1000}:${HOST_GID:-1000}"
+    network_mode: host
+    environment:
+      SPARK_HOST: 127.0.0.1
+      SPARK_PORT: 8765
+      SPARK_OBS_HOST: ${SPARK_OBS_HOST:-127.0.0.1}
+      SPARK_OBS_PORT: ${SPARK_OBS_PORT:-4455}
+      SPARK_USE_ENV_SECRETS: "1"
+      SPARK_OBS_PASSWORD: ${SPARK_OBS_PASSWORD:-}
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+      GEMINI_API_KEY: ${GEMINI_API_KEY:-}
+      GROQ_API_KEY: ${GROQ_API_KEY:-}
+      NVIDIA_NIM_API_KEY: ${NVIDIA_NIM_API_KEY:-}
+      DEEPSEEK_API_KEY: ${DEEPSEEK_API_KEY:-}
+      OPENROUTER_API_KEY: ${OPENROUTER_API_KEY:-}
+      SPARK_DEFAULT_MODEL: ${SPARK_DEFAULT_MODEL:-anthropic/claude-sonnet-4-6}
+      SPARK_LLM_BASE_URL: ${SPARK_LLM_BASE_URL:-}
+      SPARK_LOG_LEVEL: ${SPARK_LOG_LEVEL:-INFO}
+      SPARK_MOCK_OBS: ${SPARK_MOCK_OBS:-0}
+    volumes:
+      - ./.data/overlays:/app/.local/share/spark-libre/overlays
+    depends_on:
+      obs:
+        condition: service_healthy
+    # On-demand only — start.sh starts/stops containers explicitly.
+    # We deliberately do NOT auto-restart on docker daemon reboot or
+    # process crash to keep the lifecycle entirely in the user's hands.
+    restart: "no"
+
+  # Same image used to run pytest. Override target via `--build target=dev`
+  # is not portable, so we expose a dedicated profile.
+  tests:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: dev
+      args:
+        UID: ${HOST_UID:-1000}
+        GID: ${HOST_GID:-1000}
+    image: spark-libre/backend:dev-test
+    profiles: ["test"]
+    container_name: spark-libre-tests
+    user: "${HOST_UID:-1000}:${HOST_GID:-1000}"
+    environment:
+      SPARK_USE_ENV_SECRETS: "0"  # tests cover both modes via monkeypatch
+    command: ["pytest", "-q"]
+
+  obs:
+    build:
+      context: ./scripts
+      # Default Containerfile = stock PPA build (no Custom Browser Docks).
+      # Switch to the full-CEF build by exporting OBS_DOCKERFILE before
+      # running the start.sh script:
+      #   FULL_CEF=1 ./start.sh up
+      dockerfile: ${OBS_DOCKERFILE:-Containerfile.obs}
+      args:
+        UID: ${HOST_UID:-1000}
+        GID: ${HOST_GID:-1000}
+    image: spark-libre/obs:dev
+    container_name: spark-libre-obs
+    network_mode: host
+    ipc: host
+    security_opt:
+      - label=disable
+    # Match host UID/GID. The image bakes UID 1000 by default; override at
+    # build time if your `id -u` differs:
+    #   HOST_UID=$(id -u) HOST_GID=$(id -g) docker compose build obs
+    # (we use HOST_UID/HOST_GID because $UID is a read-only bash builtin)
+    user: "${HOST_UID:-1000}:${HOST_GID:-1000}"
+    # GIDs for /dev/dri (render) and /dev/video* (video) on the HOST.
+    # Run `getent group render video` to verify; adjust if your distro differs.
+    group_add:
+      - "39"   # video
+      - "998"  # render
+    devices:
+      - /dev/dri:/dev/dri
+    environment:
+      DISPLAY: ${DISPLAY:-}
+      WAYLAND_DISPLAY: ${WAYLAND_DISPLAY:-}
+      XDG_RUNTIME_DIR: ${XDG_RUNTIME_DIR:-/run/user/1000}
+      DBUS_SESSION_BUS_ADDRESS: ${DBUS_SESSION_BUS_ADDRESS:-}
+      # Force XCB (X11 / XWayland) instead of native Wayland: Qt's
+      # QDockWidget cross-window drag-to-attach is broken under Wayland
+      # in Qt 6.4-6.7 (compositors don't propagate the drag move
+      # protocol the way Qt expects). Running through XWayland fixes
+      # it and OBS works identically. Override to "wayland;xcb" if you
+      # want to test native Wayland.
+      QT_QPA_PLATFORM: "${OBS_QT_PLATFORM:-xcb}"
+      GDK_BACKEND: "x11,wayland"
+      # Forwarded so the obs-spark-libre plugin can auto-configure the
+      # bundled obs-websocket on first launch (server_enabled=true,
+      # auth password = this value).
+      SPARK_OBS_PASSWORD: ${SPARK_OBS_PASSWORD:-}
+      PULSE_SERVER: ${PULSE_SERVER:-}
+      # HOME is also set in the image but compose env wins on conflicts.
+      HOME: /portable
+      LANG: C.UTF-8
+      LC_ALL: C.UTF-8
+    volumes:
+      # Mount specific sockets (Wayland, PipeWire, DBus) instead of the whole
+      # XDG_RUNTIME_DIR — matches what scripts/run_obs_container.sh does and
+      # avoids overlay weirdness with the 700-mode runtime dir.
+      - ${XDG_RUNTIME_DIR:-/run/user/1000}/${WAYLAND_DISPLAY:-wayland-0}:${XDG_RUNTIME_DIR:-/run/user/1000}/${WAYLAND_DISPLAY:-wayland-0}
+      - ${XDG_RUNTIME_DIR:-/run/user/1000}/pipewire-0:${XDG_RUNTIME_DIR:-/run/user/1000}/pipewire-0
+      - ${XDG_RUNTIME_DIR:-/run/user/1000}/bus:${XDG_RUNTIME_DIR:-/run/user/1000}/bus
+      - /tmp/.X11-unix:/tmp/.X11-unix:rw
+      - ./.portable-obs:/portable
+    healthcheck:
+      # obs-websocket only listens AFTER user enables it in
+      # Tools → WebSocket Server Settings (first run). start_period gives
+      # plenty of room for that.
+      test: ["CMD-SHELL", "ss -tln 2>/dev/null | grep -q ':4455 '"]
+      interval: 5s
+      timeout: 3s
+      retries: 60
+      start_period: 120s
+    stdin_open: true
+    tty: true
+    # On-demand only — start.sh starts/stops containers explicitly.
+    # We deliberately do NOT auto-restart on docker daemon reboot or
+    # process crash to keep the lifecycle entirely in the user's hands.
+    restart: "no"

@@ -1,6 +1,6 @@
-# obs-spark-libre — native OBS plugin
+# obs-open-spark — native OBS plugin
 
-Thin native plugin that hosts the Spark Libre web UI as a real OBS dock
+Thin native plugin that hosts the Open Spark web UI as a real OBS dock
 and forwards user actions to the external Python backend on
 `http://127.0.0.1:8765`.
 
@@ -23,8 +23,8 @@ plugin/
 ├── data/locale/en-US.ini
 └── src/
     ├── plugin-main.c     # OBS_DECLARE_MODULE, obs_module_load
-    ├── spark-dock.hpp
-    └── spark-dock.cpp    # Qt dock + QWebEngineView
+    ├── open-spark-dock.hpp
+    └── open-spark-dock.cpp    # Qt dock + QWebEngineView
 ```
 
 ## Local build (containerized)
@@ -38,7 +38,7 @@ We never touch the host's OBS install. Iteration:
 ```
 
 When the OBS GUI comes back, you'll find the dock under
-**`Docks → Spark Libre`** (top-level menu in OBS 32; older versions
+**`Docks → Open Spark`** (top-level menu in OBS 32; older versions
 under `View → Docks`).
 
 ## CI builds (Linux / Windows / macOS)
@@ -46,23 +46,23 @@ under `View → Docks`).
 `.github/workflows/plugin-build.yml` runs the same CMake on the three
 public GitHub-hosted runners and uploads per-platform artifacts:
 
-* `obs-spark-libre-linux-x86_64`     → `obs-spark-libre.so`
-* `obs-spark-libre-windows-x86_64`   → `obs-spark-libre.dll`
-* `obs-spark-libre-macos-universal`  → `obs-spark-libre.plugin`
+* `obs-open-spark-linux-x86_64`     → `obs-open-spark.so`
+* `obs-open-spark-windows-x86_64`   → `obs-open-spark.dll`
+* `obs-open-spark-macos-universal`  → `obs-open-spark.plugin`
 
 Drop the artifact into your OBS plugins directory:
 
 | OS      | Path |
 |---------|------|
-| Linux   | `~/.config/obs-studio/plugins/obs-spark-libre/bin/64bit/obs-spark-libre.so` |
-| Windows | `%APPDATA%\obs-studio\plugins\obs-spark-libre\bin\64bit\obs-spark-libre.dll` |
-| macOS   | `~/Library/Application Support/obs-studio/plugins/obs-spark-libre.plugin` |
+| Linux   | `~/.config/obs-studio/plugins/obs-open-spark/bin/64bit/obs-open-spark.so` |
+| Windows | `%APPDATA%\obs-studio\plugins\obs-open-spark\bin\64bit\obs-open-spark.dll` |
+| macOS   | `~/Library/Application Support/obs-studio/plugins/obs-open-spark.plugin` |
 
 ## Roadmap
 
 * [x] Phase 1 — skeleton plugin loads, registers a Qt dock with embedded
       `QWebEngineView` pointing at `/ui/`.
-* [ ] Phase 2 — menu entries under `Tools → Spark Libre` (Generate /
+* [ ] Phase 2 — menu entries under `Tools → Open Spark` (Generate /
       Generate scene / Settings) that call the backend via libcurl.
 * [ ] Phase 3 — configurable hotkeys (Generate-from-prompt, Inject-last,
       Toggle-dock).

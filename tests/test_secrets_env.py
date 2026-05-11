@@ -1,6 +1,6 @@
 """Env-var fallback for secrets_store, used inside containers.
 
-When SPARK_USE_ENV_SECRETS=1 we MUST NOT touch the OS keyring (it does not
+When OPENSPARK_USE_ENV_SECRETS=1 we MUST NOT touch the OS keyring (it does not
 exist in a stripped container anyway). All reads fall back to env vars,
 all writes become no-ops with a warning.
 """
@@ -11,15 +11,15 @@ import logging
 
 import pytest
 
-from spark_libre import secrets_store
+from open_spark import secrets_store
 
 
 @pytest.fixture
 def env_mode(monkeypatch: pytest.MonkeyPatch):
     """Force env-secret mode and clear common provider vars."""
-    monkeypatch.setenv("SPARK_USE_ENV_SECRETS", "1")
+    monkeypatch.setenv("OPENSPARK_USE_ENV_SECRETS", "1")
     for var in (
-        "SPARK_OBS_PASSWORD",
+        "OPENSPARK_OBS_PASSWORD",
         "ANTHROPIC_API_KEY",
         "OPENAI_API_KEY",
         "GEMINI_API_KEY",
@@ -33,7 +33,7 @@ def env_mode(monkeypatch: pytest.MonkeyPatch):
 
 
 def test_env_mode_reads_obs_password(env_mode: pytest.MonkeyPatch) -> None:
-    env_mode.setenv("SPARK_OBS_PASSWORD", "swordfish")
+    env_mode.setenv("OPENSPARK_OBS_PASSWORD", "swordfish")
     assert secrets_store.get_obs_password() == "swordfish"
 
 
@@ -95,7 +95,7 @@ def test_env_mode_delete_clears_user_file(
 
 def test_env_mode_off_falls_through_to_keyring(monkeypatch: pytest.MonkeyPatch) -> None:
     """When the flag is unset/0 we go through keyring as before."""
-    monkeypatch.delenv("SPARK_USE_ENV_SECRETS", raising=False)
+    monkeypatch.delenv("OPENSPARK_USE_ENV_SECRETS", raising=False)
     fake: dict[tuple[str, str], str] = {}
 
     class FakeKeyring:

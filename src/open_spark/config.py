@@ -12,12 +12,12 @@ from pathlib import Path
 from pydantic import Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
-APP_NAME = "spark-libre"
-KEYRING_SERVICE = "spark-libre"
+APP_NAME = "open-spark"
+KEYRING_SERVICE = "open-spark"
 
 
 def app_data_dir() -> Path:
-    """Per-user data dir for Spark Libre's own state (config.json, overlays)."""
+    """Per-user data dir for Open Spark's own state (config.json, overlays)."""
     if sys.platform == "win32":
         base = Path(os.environ.get("APPDATA", Path.home() / "AppData" / "Roaming"))
     elif sys.platform == "darwin":
@@ -86,8 +86,8 @@ class Settings(BaseSettings):
     log_level: str = "INFO"
 
     # Overlay scene defaults
-    obs_scene_name: str = "Spark Libre"
-    obs_source_prefix: str = "spark-libre-overlay"
+    obs_scene_name: str = "Open Spark"
+    obs_source_prefix: str = "open-spark-overlay"
 
     @property
     def overlay_base_url(self) -> str:
@@ -99,7 +99,7 @@ class Settings(BaseSettings):
         if host not in {"127.0.0.1", "localhost", "::1"}:
             raise ValueError(
                 f"Refusing to bind to non-loopback host {host!r}. "
-                "Spark Libre is local-only by design."
+                "Open Spark is local-only by design."
             )
         return (host, self.port)
 

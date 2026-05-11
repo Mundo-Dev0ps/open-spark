@@ -1,4 +1,4 @@
-# Builder image for the obs-spark-libre native plugin (Linux x86_64).
+# Builder image for the obs-open-spark native plugin (Linux x86_64).
 #
 # Why a dedicated container:
 #   * The plugin sources live under ./plugin/. We need libobs-dev,
@@ -9,7 +9,7 @@
 #     install is NEVER touched.
 #
 # Outputs:
-#   /out/obs-spark-libre.so          — the plugin shared object
+#   /out/obs-open-spark.so          — the plugin shared object
 #   /out/data/locale/en-US.ini       — plugin localization bundle
 #
 # Use via `./start.sh plugin-build`, which mounts ./plugin as /src and
@@ -43,9 +43,9 @@ ENTRYPOINT ["/bin/bash", "-euxo", "pipefail", "-c", "\
   cmake -S /tmp/src -B /tmp/src/build -G Ninja \
       -DCMAKE_BUILD_TYPE=Release \
       -DPORTABLE_LAYOUT=ON \
-      -DSPARK_WITH_WEBENGINE=${SPARK_WITH_WEBENGINE:-OFF} && \
+      -DOPENSPARK_WITH_WEBENGINE=${OPENSPARK_WITH_WEBENGINE:-OFF} && \
   cmake --build /tmp/src/build --parallel && \
   mkdir -p /out && \
-  cp /tmp/src/build/portable/plugins/64bit/obs-spark-libre.so /out/ && \
-  echo \"OK plugin built (WebEngine=${SPARK_WITH_WEBENGINE:-OFF}) -> /out/obs-spark-libre.so\" \
+  cp /tmp/src/build/portable/plugins/64bit/obs-open-spark.so /out/ && \
+  echo \"OK plugin built (WebEngine=${OPENSPARK_WITH_WEBENGINE:-OFF}) -> /out/obs-open-spark.so\" \
 "]

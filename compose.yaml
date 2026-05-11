@@ -1,4 +1,4 @@
-# Spark Libre — local TEST stack. Not production.
+# Open Spark — local TEST stack. Not production.
 #
 # Two services:
 #   backend  — FastAPI app on 127.0.0.1:8765 (Custom Browser Dock target)
@@ -8,13 +8,13 @@
 #   - backend can bind to 127.0.0.1:8765 (Settings.bind_address() rule)
 #   - backend reaches obs-websocket on 127.0.0.1:4455
 #   - your existing host OBS is left alone (different process, port may
-#     conflict — stop host OBS or change SPARK_OBS_PORT)
+#     conflict — stop host OBS or change OPENSPARK_OBS_PORT)
 #
 # Secrets come from .env (gitignored). We never mount your real keyring.
 #
 # Quickstart:
 #   cp .env.compose.example .env
-#   # fill SPARK_OBS_PASSWORD and one *_API_KEY
+#   # fill OPENSPARK_OBS_PASSWORD and one *_API_KEY
 #   docker compose up --build
 #   xdg-open http://127.0.0.1:8765
 
@@ -27,19 +27,19 @@ services:
       args:
         UID: ${HOST_UID:-1000}
         GID: ${HOST_GID:-1000}
-    image: spark-libre/backend:dev
-    container_name: spark-libre-backend
+    image: open-spark/backend:dev
+    container_name: open-spark-backend
     # Match host UID so the bind-mounted .data/ is writable from the
     # container.
     user: "${HOST_UID:-1000}:${HOST_GID:-1000}"
     network_mode: host
     environment:
-      SPARK_HOST: 127.0.0.1
-      SPARK_PORT: 8765
-      SPARK_OBS_HOST: ${SPARK_OBS_HOST:-127.0.0.1}
-      SPARK_OBS_PORT: ${SPARK_OBS_PORT:-4455}
-      SPARK_USE_ENV_SECRETS: "1"
-      SPARK_OBS_PASSWORD: ${SPARK_OBS_PASSWORD:-}
+      OPENSPARK_HOST: 127.0.0.1
+      OPENSPARK_PORT: 8765
+      OPENSPARK_OBS_HOST: ${OPENSPARK_OBS_HOST:-127.0.0.1}
+      OPENSPARK_OBS_PORT: ${OPENSPARK_OBS_PORT:-4455}
+      OPENSPARK_USE_ENV_SECRETS: "1"
+      OPENSPARK_OBS_PASSWORD: ${OPENSPARK_OBS_PASSWORD:-}
       ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
       OPENAI_API_KEY: ${OPENAI_API_KEY:-}
       GEMINI_API_KEY: ${GEMINI_API_KEY:-}
@@ -47,12 +47,12 @@ services:
       NVIDIA_NIM_API_KEY: ${NVIDIA_NIM_API_KEY:-}
       DEEPSEEK_API_KEY: ${DEEPSEEK_API_KEY:-}
       OPENROUTER_API_KEY: ${OPENROUTER_API_KEY:-}
-      SPARK_DEFAULT_MODEL: ${SPARK_DEFAULT_MODEL:-anthropic/claude-sonnet-4-6}
-      SPARK_LLM_BASE_URL: ${SPARK_LLM_BASE_URL:-}
-      SPARK_LOG_LEVEL: ${SPARK_LOG_LEVEL:-INFO}
-      SPARK_MOCK_OBS: ${SPARK_MOCK_OBS:-0}
+      OPENSPARK_DEFAULT_MODEL: ${OPENSPARK_DEFAULT_MODEL:-anthropic/claude-sonnet-4-6}
+      OPENSPARK_LLM_BASE_URL: ${OPENSPARK_LLM_BASE_URL:-}
+      OPENSPARK_LOG_LEVEL: ${OPENSPARK_LOG_LEVEL:-INFO}
+      OPENSPARK_MOCK_OBS: ${OPENSPARK_MOCK_OBS:-0}
     volumes:
-      - ./.data/overlays:/app/.local/share/spark-libre/overlays
+      - ./.data/overlays:/app/.local/share/open-spark/overlays
     depends_on:
       obs:
         condition: service_healthy
@@ -71,12 +71,12 @@ services:
       args:
         UID: ${HOST_UID:-1000}
         GID: ${HOST_GID:-1000}
-    image: spark-libre/backend:dev-test
+    image: open-spark/backend:dev-test
     profiles: ["test"]
-    container_name: spark-libre-tests
+    container_name: open-spark-tests
     user: "${HOST_UID:-1000}:${HOST_GID:-1000}"
     environment:
-      SPARK_USE_ENV_SECRETS: "0"  # tests cover both modes via monkeypatch
+      OPENSPARK_USE_ENV_SECRETS: "0"  # tests cover both modes via monkeypatch
     command: ["pytest", "-q"]
 
   obs:
@@ -90,8 +90,8 @@ services:
       args:
         UID: ${HOST_UID:-1000}
         GID: ${HOST_GID:-1000}
-    image: spark-libre/obs:dev
-    container_name: spark-libre-obs
+    image: open-spark/obs:dev
+    container_name: open-spark-obs
     network_mode: host
     ipc: host
     security_opt:
@@ -121,10 +121,10 @@ services:
       # want to test native Wayland.
       QT_QPA_PLATFORM: "${OBS_QT_PLATFORM:-xcb}"
       GDK_BACKEND: "x11,wayland"
-      # Forwarded so the obs-spark-libre plugin can auto-configure the
+      # Forwarded so the obs-open-spark plugin can auto-configure the
       # bundled obs-websocket on first launch (server_enabled=true,
       # auth password = this value).
-      SPARK_OBS_PASSWORD: ${SPARK_OBS_PASSWORD:-}
+      OPENSPARK_OBS_PASSWORD: ${OPENSPARK_OBS_PASSWORD:-}
       PULSE_SERVER: ${PULSE_SERVER:-}
       # HOME is also set in the image but compose env wins on conflicts.
       HOME: /portable

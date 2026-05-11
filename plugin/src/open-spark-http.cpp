@@ -1,22 +1,22 @@
-#include "spark-http.hpp"
+#include "open-spark-http.hpp"
 
 #include <QNetworkAccessManager>
 #include <QNetworkReply>
 #include <QNetworkRequest>
 #include <QUrl>
 
-namespace spark {
+namespace openspark {
 
-SparkHttp::SparkHttp(QObject *parent)
+OpenSparkHttp::OpenSparkHttp(QObject *parent)
     : QObject(parent), nam_(new QNetworkAccessManager(this))
 {
 }
 
-SparkHttp::~SparkHttp() = default;
+OpenSparkHttp::~OpenSparkHttp() = default;
 
-QString SparkHttp::baseUrl()
+QString OpenSparkHttp::baseUrl()
 {
-    const QByteArray env = qgetenv("SPARK_BACKEND_URL");
+    const QByteArray env = qgetenv("OPENSPARK_BACKEND_URL");
     if (!env.isEmpty()) {
         return QString::fromUtf8(env);
     }
@@ -40,7 +40,7 @@ static HttpResult buildResult(QNetworkReply *reply)
     return r;
 }
 
-void SparkHttp::postJson(
+void OpenSparkHttp::postJson(
     const QString &path, const QByteArray &body,
     std::function<void(const HttpResult &)> cb)
 {
@@ -54,7 +54,7 @@ void SparkHttp::postJson(
     });
 }
 
-void SparkHttp::getJson(
+void OpenSparkHttp::getJson(
     const QString &path, std::function<void(const HttpResult &)> cb)
 {
     QNetworkRequest req(QUrl(baseUrl() + path));
@@ -67,7 +67,7 @@ void SparkHttp::getJson(
     });
 }
 
-void SparkHttp::putJson(
+void OpenSparkHttp::putJson(
     const QString &path, const QByteArray &body,
     std::function<void(const HttpResult &)> cb)
 {
@@ -81,7 +81,7 @@ void SparkHttp::putJson(
     });
 }
 
-void SparkHttp::del(
+void OpenSparkHttp::del(
     const QString &path, std::function<void(const HttpResult &)> cb)
 {
     QNetworkRequest req(QUrl(baseUrl() + path));
@@ -92,4 +92,4 @@ void SparkHttp::del(
     });
 }
 
-}  // namespace spark
+}  // namespace openspark

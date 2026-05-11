@@ -1,11 +1,11 @@
-// Spark Libre dock — native Qt panel hosted as an OBS dock.
+// Open Spark dock — native Qt panel hosted as an OBS dock.
 //
 // The dock renders the same actions as the web UI (generate overlay,
 // generate scene, list/inject/regenerate/delete overlays) but using
 // pure Qt widgets, so it works inside any OBS build regardless of
 // browser-panel availability and feels like a real plugin pane.
 //
-// All backend traffic goes through ``spark::SparkHttp`` over loopback.
+// All backend traffic goes through ``openspark::OpenSparkHttp`` over loopback.
 
 #pragma once
 
@@ -25,16 +25,16 @@ class QPlainTextEdit;
 class QTimer;
 class QTabWidget;
 
-namespace spark {
-class SparkHttp;
+namespace openspark {
+class OpenSparkHttp;
 struct HttpResult;
-}  // namespace spark
+}  // namespace openspark
 
-class SparkLibreDock : public QFrame {
+class OpenSparkDock : public QFrame {
     Q_OBJECT
 public:
-    explicit SparkLibreDock(QWidget *parent = nullptr);
-    ~SparkLibreDock() override;
+    explicit OpenSparkDock(QWidget *parent = nullptr);
+    ~OpenSparkDock() override;
 
     /// URL the dock loads on construction (also used by the actions
     /// menu's "Open in browser" entry, hence ``static``).
@@ -66,7 +66,7 @@ private:
 
     QString url_;
     QString lastOverlayId_;
-    spark::SparkHttp *http_ = nullptr;
+    openspark::OpenSparkHttp *http_ = nullptr;
 
     // Top status row.
     QLabel *statusLabel_ = nullptr;
@@ -122,8 +122,8 @@ private:
 extern "C" {
 #endif /* __cplusplus */
 
-bool spark_dock_register(void);
-void spark_dock_unregister(void);
+bool openspark_dock_register(void);
+void openspark_dock_unregister(void);
 
 #ifdef __cplusplus
 }

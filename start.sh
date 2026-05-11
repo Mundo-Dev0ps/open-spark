@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# start.sh — Spark Libre dev stack launcher.
+# start.sh — Open Spark dev stack launcher.
 #
 # Subcommands:
 #   up         (default) build + start backend+obs, follow logs
@@ -19,9 +19,9 @@
 #   shell [svc]          shell into a running container (default: backend)
 #   smoke                quick API smoke test against backend (no OBS dep)
 #   tray                 launch native desktop window + system-tray icon
-#                        (requires `pip install --user 'spark-libre[tray]'`
+#                        (requires `pip install --user 'open-spark[tray]'`
 #                         on the host; backend is auto-started if not up)
-#   plugin-build         compile the native obs-spark-libre plugin in a
+#   plugin-build         compile the native obs-open-spark plugin in a
 #                        builder container, drop the .so into the OBS
 #                        container's portable plugin dir
 #   plugin-reload        plugin-build + restart the obs container so the
@@ -83,7 +83,7 @@ require_env_file() {
   if [[ ! -f .env ]]; then
     log ".env missing — copying from .env.compose.example"
     cp .env.compose.example .env
-    warn "Edit .env to set SPARK_OBS_PASSWORD and an *_API_KEY before starting OBS-dependent flows."
+    warn "Edit .env to set OPENSPARK_OBS_PASSWORD and an *_API_KEY before starting OBS-dependent flows."
   fi
 }
 
@@ -210,10 +210,10 @@ cmd_shell() {
 cmd_smoke() {
   log "smoke: starting backend in mock mode (no OBS, no LLM)"
   docker run -d --rm --name spark-smoke --network=host \
-      -e SPARK_USE_ENV_SECRETS=1 \
-      -e SPARK_MOCK_OBS=1 \
+      -e OPENSPARK_USE_ENV_SECRETS=1 \
+      -e OPENSPARK_MOCK_OBS=1 \
       -e ANTHROPIC_API_KEY=sk-fake \
-      spark-libre/backend:dev >/dev/null
+      open-spark/backend:dev >/dev/null
   trap 'docker stop spark-smoke >/dev/null 2>&1 || true' EXIT
   for i in 1 2 3 4 5; do
     sleep 1
@@ -235,13 +235,13 @@ cmd_tray() {
     log "backend not reachable; bringing stack up in the background"
     "${DC[@]}" up -d
   fi
-  if ! command -v spark-libre-tray >/dev/null 2>&1; then
+  if ! command -v open-spark-tray >/dev/null 2>&1; then
     cat >&2 <<'EOF'
-spark-libre-tray entry point not found.
+open-spark-tray entry point not found.
 
 Install on the host (NOT in the container — tray needs a real display):
 
-    pip install --user 'spark-libre[tray]' \
+    pip install --user 'open-spark[tray]' \
         --no-binary=keyring,jeepney,SecretStorage  # optional
 
 Linux notes:
@@ -253,16 +253,16 @@ EOF
     return 4
   fi
   log "launching native window"
-  exec spark-libre-tray "$@"
+  exec open-spark-tray "$@"
 }
 
 cmd_plugin_build() {
   ensure_host_dirs
-  local img="spark-libre/plugin-builder:dev"
+  local img="open-spark/plugin-builder:dev"
   # OBS scans the XDG user-plugin layout
   #   $XDG_CONFIG_HOME/obs-studio/plugins/<name>/bin/64bit/<name>.so
   # In our container XDG_CONFIG_HOME=/portable/config, so install there.
-  local plugin_root="$REPO_ROOT/.portable-obs/config/obs-studio/plugins/obs-spark-libre"
+  local plugin_root="$REPO_ROOT/.portable-obs/config/obs-studio/plugins/obs-open-spark"
   local plugin_bin="$plugin_root/bin/64bit"
   local plugin_data="$plugin_root/data/locale"
   mkdir -p "$plugin_bin" "$plugin_data"
@@ -272,17 +272,17 @@ cmd_plugin_build() {
       -f "$REPO_ROOT/scripts/Containerfile.plugin-builder" \
       "$REPO_ROOT/scripts"
 
-  log "compiling obs-spark-libre.so (WebEngine=${WITH_WEBENGINE:-OFF})"
+  log "compiling obs-open-spark.so (WebEngine=${WITH_WEBENGINE:-OFF})"
   docker run --rm \
       -v "$REPO_ROOT/plugin:/src:ro" \
       -v "$plugin_bin:/out:rw" \
-      -e "SPARK_WITH_WEBENGINE=${WITH_WEBENGINE:-OFF}" \
+      -e "OPENSPARK_WITH_WEBENGINE=${WITH_WEBENGINE:-OFF}" \
       --user "$HOST_UID:$HOST_GID" \
       "$img"
 
   cp -f "$REPO_ROOT/plugin/data/locale/"*.ini "$plugin_data/" 2>/dev/null || true
 
-  log "plugin written to $plugin_bin/obs-spark-libre.so"
+  log "plugin written to $plugin_bin/obs-open-spark.so"
   ls -la "$plugin_bin/" 2>&1
 }
 
@@ -290,7 +290,7 @@ cmd_plugin_reload() {
   cmd_plugin_build
   log "restarting obs container so the new plugin is picked up"
   "${DC[@]}" restart obs
-  log "tail OBS logs to confirm load:  ./start.sh logs obs | grep spark-libre"
+  log "tail OBS logs to confirm load:  ./start.sh logs obs | grep open-spark"
 }
 
 cmd_clean() {

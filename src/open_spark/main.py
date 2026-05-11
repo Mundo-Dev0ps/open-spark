@@ -64,7 +64,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             pass
 
     app = FastAPI(
-        title="Spark Libre",
+        title="Open Spark",
         version="0.1.0",
         lifespan=lifespan,
         docs_url="/api/docs",
@@ -83,5 +83,5 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     return app
 
 
-# Convenience for `uvicorn spark_libre.main:app`
+# Convenience for `uvicorn open_spark.main:app`
 app = create_app()

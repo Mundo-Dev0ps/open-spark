@@ -12,7 +12,7 @@
 class QNetworkAccessManager;
 class QNetworkReply;
 
-namespace spark {
+namespace openspark {
 
 /// Result of a backend call. Stays small — UI code just needs to know
 /// whether it succeeded and what the response body said.
@@ -23,14 +23,14 @@ struct HttpResult {
     QString error;
 };
 
-class SparkHttp : public QObject {
+class OpenSparkHttp : public QObject {
     Q_OBJECT
 public:
-    explicit SparkHttp(QObject *parent = nullptr);
-    ~SparkHttp() override;
+    explicit OpenSparkHttp(QObject *parent = nullptr);
+    ~OpenSparkHttp() override;
 
     /// Base URL of the backend. Defaults to ``http://127.0.0.1:8765``;
-    /// override with the ``SPARK_BACKEND_URL`` environment variable.
+    /// override with the ``OPENSPARK_BACKEND_URL`` environment variable.
     static QString baseUrl();
 
     /// POST a JSON body to ``baseUrl + path``. Calls ``cb`` on the GUI
@@ -57,4 +57,4 @@ private:
     QNetworkAccessManager *nam_;
 };
 
-}  // namespace spark
+}  // namespace openspark

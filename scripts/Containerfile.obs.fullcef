@@ -3,7 +3,7 @@
 # Why this exists:
 #   The official Ubuntu obsproject PPA ships obs-browser with browser
 #   *source* support but with browser *panels* (Custom Browser Docks)
-#   disabled at compile time. That blocks the "Spark Libre as embedded
+#   disabled at compile time. That blocks the "Open Spark as embedded
 #   OBS dock" UX. This Containerfile rebuilds the obs-browser plugin
 #   against an upstream CEF binary distribution with panel support ON,
 #   then drops the resulting .so over the PPA's stock plugin.

@@ -1,4 +1,4 @@
-"""Register Spark Libre as a Custom Browser Dock in OBS Studio.
+"""Register Open Spark as a Custom Browser Dock in OBS Studio.
 
 OBS persists docks in ``global.ini`` under section ``[BasicWindow]`` with
 keys ``ExtraBrowserDocks`` (a JSON array) and the legacy
@@ -21,7 +21,7 @@ from ..config import obs_config_dirs
 
 log = logging.getLogger(__name__)
 
-DEFAULT_DOCK_NAME = "Spark Libre"
+DEFAULT_DOCK_NAME = "Open Spark"
 DEFAULT_URL = "http://127.0.0.1:8765"
 
 
@@ -54,7 +54,7 @@ def install(
     url: str = DEFAULT_URL,
     config_dir: Path | None = None,
 ) -> Path:
-    """Update OBS ``global.ini`` to include the Spark Libre dock.
+    """Update OBS ``global.ini`` to include the Open Spark dock.
 
     Returns the path of the modified file.
     """
@@ -91,7 +91,7 @@ def install(
 
 def main() -> int:
     logging.basicConfig(level=logging.INFO, format="%(levelname)s: %(message)s")
-    parser = argparse.ArgumentParser(description="Install Spark Libre OBS dock")
+    parser = argparse.ArgumentParser(description="Install Open Spark OBS dock")
     parser.add_argument("--name", default=DEFAULT_DOCK_NAME)
     parser.add_argument("--url", default=DEFAULT_URL)
     parser.add_argument("--config-dir", type=Path, default=None,

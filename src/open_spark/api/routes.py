@@ -124,7 +124,7 @@ async def inject(request: Request, payload: InjectRequest) -> InjectResponse:
     #   2. user_config override (set via Settings tab)
     #   3. the user's CURRENTLY ACTIVE scene in OBS — so inject lands
     #      on the scene the user is actually looking at
-    #   4. settings.obs_scene_name fallback ("Spark Libre")
+    #   4. settings.obs_scene_name fallback ("Open Spark")
     user_cfg = _user_config()
     scene = (
         payload.scene

@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from spark_libre.overlays import OverlayStore
+from open_spark.overlays import OverlayStore
 
 
 def test_save_and_list(overlay_store: OverlayStore):

@@ -2,12 +2,12 @@
 //
 // We write the obs-websocket config.json BEFORE its module loads so the
 // user never has to open Tools → WebSocket Server Settings manually.
-// The plugin module name "obs-spark-libre" sorts alphabetically before
+// The plugin module name "obs-open-spark" sorts alphabetically before
 // "obs-websocket", so obs-studio loads us first; by the time the
 // websocket plugin reads its config, it's already what we want.
 //
 // Password resolution order:
-//   1. SPARK_OBS_PASSWORD env var (set by docker-compose)
+//   1. OPENSPARK_OBS_PASSWORD env var (set by docker-compose)
 //   2. existing password if config.json already exists
 //   3. literal "test" (matches the bundled .env.compose.example)
 //
@@ -42,7 +42,7 @@ QString websocket_config_path()
 
 QString resolve_password(const QJsonObject &existing)
 {
-    const QByteArray env = qgetenv("SPARK_OBS_PASSWORD");
+    const QByteArray env = qgetenv("OPENSPARK_OBS_PASSWORD");
     if (!env.isEmpty()) {
         return QString::fromUtf8(env);
     }
@@ -56,7 +56,7 @@ QString resolve_password(const QJsonObject &existing)
 
 }  // namespace
 
-extern "C" void spark_websocket_bootstrap(void)
+extern "C" void openspark_websocket_bootstrap(void)
 {
     const QString path = websocket_config_path();
     QFileInfo fi(path);
@@ -81,7 +81,7 @@ extern "C" void spark_websocket_bootstrap(void)
         && obj.value(QStringLiteral("server_port")).toInt(0) == 4455;
     if (already_ok) {
         blog(LOG_INFO,
-             "[obs-spark-libre] obs-websocket already configured (port 4455)");
+             "[obs-open-spark] obs-websocket already configured (port 4455)");
         return;
     }
 
@@ -95,14 +95,14 @@ extern "C" void spark_websocket_bootstrap(void)
     QFile out(path);
     if (!out.open(QIODevice::WriteOnly | QIODevice::Truncate)) {
         blog(LOG_WARNING,
-             "[obs-spark-libre] could not write %s",
+             "[obs-open-spark] could not write %s",
              path.toUtf8().constData());
         return;
     }
     out.write(QJsonDocument(obj).toJson(QJsonDocument::Indented));
     out.close();
     blog(LOG_INFO,
-         "[obs-spark-libre] obs-websocket auto-configured at %s "
-         "(port=4455, password from SPARK_OBS_PASSWORD env)",
+         "[obs-open-spark] obs-websocket auto-configured at %s "
+         "(port=4455, password from OPENSPARK_OBS_PASSWORD env)",
          path.toUtf8().constData());
 }

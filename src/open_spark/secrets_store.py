@@ -6,7 +6,7 @@ Two modes:
    are stored in the OS keyring (gnome-keyring, kwallet, Windows Credential
    Manager, macOS Keychain).
 
-2. **Env mode** — set ``SPARK_USE_ENV_SECRETS=1``. Used inside containers
+2. **Env mode** — set ``OPENSPARK_USE_ENV_SECRETS=1``. Used inside containers
    where there is no DBus / keyring backend. Reads come from environment
    variables; writes are no-ops with a warning. This keeps the contract
    "secrets never on disk in plaintext" intact: containers receive secrets
@@ -14,18 +14,18 @@ Two modes:
 
 Env-mode mapping:
 
-    obs-ws-password   → SPARK_OBS_PASSWORD
+    obs-ws-password   → OPENSPARK_OBS_PASSWORD
     llm:anthropic     → ANTHROPIC_API_KEY
     llm:openai        → OPENAI_API_KEY
     llm:gemini        → GEMINI_API_KEY
     llm:groq          → GROQ_API_KEY
     llm:ollama        → OLLAMA_API_KEY
-    <other>           → SPARK_SECRET_<KEY_UPPERCASED_AND_SANITIZED>
+    <other>           → OPENSPARK_SECRET_<KEY_UPPERCASED_AND_SANITIZED>
 
 Audit / clear via ``keyring`` CLI (host) or compose env (container):
 
-    keyring get spark-libre obs-ws-password
-    keyring del spark-libre llm:anthropic
+    keyring get open-spark obs-ws-password
+    keyring del open-spark llm:anthropic
 """
 
 from __future__ import annotations
@@ -45,7 +45,7 @@ log = logging.getLogger(__name__)
 OBS_PASSWORD_KEY = "obs-ws-password"
 
 _ENV_OVERRIDES: dict[str, str] = {
-    OBS_PASSWORD_KEY: "SPARK_OBS_PASSWORD",
+    OBS_PASSWORD_KEY: "OPENSPARK_OBS_PASSWORD",
     "llm:anthropic": "ANTHROPIC_API_KEY",
     "llm:openai": "OPENAI_API_KEY",
     "llm:gemini": "GEMINI_API_KEY",
@@ -69,14 +69,14 @@ def _llm_key(provider: str) -> str:
 
 def _env_mode() -> bool:
     """True when the container/CI flag is set."""
-    return os.environ.get("SPARK_USE_ENV_SECRETS", "").strip().lower() in {"1", "true", "yes", "on"}
+    return os.environ.get("OPENSPARK_USE_ENV_SECRETS", "").strip().lower() in {"1", "true", "yes", "on"}
 
 
 def _env_var_for(key: str) -> str:
     if key in _ENV_OVERRIDES:
         return _ENV_OVERRIDES[key]
     sanitized = "".join(c if c.isalnum() else "_" for c in key).upper()
-    return f"SPARK_SECRET_{sanitized}"
+    return f"OPENSPARK_SECRET_{sanitized}"
 
 
 def _user_secrets_path() -> Path:

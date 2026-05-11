@@ -8,7 +8,7 @@
 #   - DBus session bus (for portals)
 #
 # obs-websocket inside the container listens on 4455 by default; we use
-# `--network=host` so the Spark Libre backend on the host can reach
+# `--network=host` so the Open Spark backend on the host can reach
 # 127.0.0.1:4455 with no port-forwarding gymnastics.
 #
 # Usage:

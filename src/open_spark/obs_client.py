@@ -59,7 +59,7 @@ class _MockSource:
 class MockOBSClient:
     """In-memory OBS double for dev without OBS open. No real I/O."""
 
-    scenes: list[str] = field(default_factory=lambda: ["Spark Libre"])
+    scenes: list[str] = field(default_factory=lambda: ["Open Spark"])
     sources: dict[str, _MockSource] = field(default_factory=dict)
     # scene_name -> list of source names in order, mirrors OBS scene items.
     scene_items: dict[str, list[str]] = field(default_factory=dict)
@@ -90,7 +90,7 @@ class MockOBSClient:
         height: int = 1080,
         scene: str | None = None,
     ) -> dict:
-        scene = scene or "Spark Libre"
+        scene = scene or "Open Spark"
         if scene not in self.scenes:
             self.scenes.append(scene)
             log.info("[mock-obs] created scene %s", scene)
@@ -237,7 +237,7 @@ class OBSClient:
         """Name of the program/active scene the user is currently on.
 
         Used so inject defaults to the visible scene instead of always
-        forcing a hidden "Spark Libre" scene the user has to switch to
+        forcing a hidden "Open Spark" scene the user has to switch to
         by hand.
         """
         if self._req is None:
@@ -273,7 +273,7 @@ class OBSClient:
         if self._req is None:
             raise RuntimeError("OBS client not connected")
 
-        scene = scene or "Spark Libre"
+        scene = scene or "Open Spark"
         scenes = await self.list_scenes()
         if scene not in scenes:
             await self._retry(self._req.create_scene, scene)

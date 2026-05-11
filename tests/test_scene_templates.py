@@ -17,8 +17,8 @@ from typing import Any
 
 import pytest
 
-from spark_libre import llm
-from spark_libre.obs_client import MockOBSClient
+from open_spark import llm
+from open_spark.obs_client import MockOBSClient
 
 
 # --- _extract_json -----------------------------------------------------------
@@ -168,13 +168,13 @@ async def test_mock_upsert_scene_layout_creates_scene() -> None:
     await client.connect()
     sources = [
         {
-            "name": "spark-libre-overlay-bg",
+            "name": "open-spark-overlay-bg",
             "url": "http://x/bg.html",
             "role": "background",
             "transform": {"x": 0, "y": 0, "width": 1920, "height": 1080},
         },
         {
-            "name": "spark-libre-overlay-chat",
+            "name": "open-spark-overlay-chat",
             "url": "http://x/chat.html",
             "role": "chat",
             "transform": {"x": 0, "y": 200, "width": 400, "height": 700},
@@ -186,8 +186,8 @@ async def test_mock_upsert_scene_layout_creates_scene() -> None:
     assert "Demo" in client.scenes
     assert len(result["sources"]) == 2
     items = client.scene_items["Demo"]
-    assert items == ["spark-libre-overlay-bg", "spark-libre-overlay-chat"]
-    bg = client.sources["spark-libre-overlay-bg"]
+    assert items == ["open-spark-overlay-bg", "open-spark-overlay-chat"]
+    bg = client.sources["open-spark-overlay-bg"]
     assert bg.transform == {"x": 0, "y": 0, "width": 1920, "height": 1080}
 
 
@@ -398,7 +398,7 @@ def test_regenerate_overlay_overwrites_html(
         "<body>NEW REGEN PAYLOAD</body></html>"
     )
 
-    from spark_libre import llm as llm_mod
+    from open_spark import llm as llm_mod
 
     async def _fake(prompt: str, *, model: str, base_url=None, style=None):
         return llm_mod.LLMResult(html=new_html, model="stub", usage={})
@@ -444,7 +444,7 @@ def test_refine_overlay_patches_html(
         "<body><h1>REFINED</h1></body></html>"
     )
 
-    from spark_libre import llm as llm_mod
+    from open_spark import llm as llm_mod
 
     async def _fake_refine(*, existing_html, instruction, model, base_url=None, style=None):
         # Sanity: the route MUST hand us the existing HTML
@@ -483,7 +483,7 @@ def test_inject_uses_current_scene_when_no_scene_provided(
 ) -> None:
     """If the caller didn't specify a scene, inject lands on whatever
     the user currently has selected in OBS, NOT on the hard-coded
-    "Spark Libre" scene which the user probably can't see."""
+    "Open Spark" scene which the user probably can't see."""
     # Generate so we have something to inject.
     r = client.post("/api/generate", json={"prompt": "x"})
     assert r.status_code == 200, r.text

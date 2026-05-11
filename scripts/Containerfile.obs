@@ -3,7 +3,7 @@
 # Why Ubuntu + the obsproject PPA?
 #   The official Fedora obs-studio package ships WITHOUT CEF (Chromium
 #   Embedded Framework) due to licensing, which means no Browser Source
-#   and no Custom Browser Docks — both core features Spark Libre depends
+#   and no Custom Browser Docks — both core features Open Spark depends
 #   on. The obsproject PPA on Ubuntu is maintained by upstream and ships
 #   full CEF.
 #
@@ -38,7 +38,7 @@ RUN apt-get update \
         libwayland-client0 libwayland-cursor0 libwayland-egl1 \
         libxkbcommon0 libxkbcommon-x11-0 \
         libqt6waylandclient6 libqt6svg6 \
-        # Qt6 WebEngine runtime (required by obs-spark-libre plugin
+        # Qt6 WebEngine runtime (required by obs-open-spark plugin
         # so its embedded QWebEngineView can render the backend UI).
         libqt6webenginewidgets6 libqt6webenginecore6 \
         libnss3 libxcomposite1 libxdamage1 libxrandr2 libxtst6 \

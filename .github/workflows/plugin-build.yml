@@ -13,9 +13,9 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: read
+  contents: write   # needed by the release job to attach artifacts
 
-# Native obs-spark-libre plugin build matrix.
+# Native obs-open-spark plugin build matrix.
 #
 # Each platform follows the same flow:
 #   1. Install OBS Studio dev headers (libobs + obs-frontend-api)
@@ -57,22 +57,22 @@ jobs:
       - name: Stage artifact
         run: |
           # Layout that OBS expects for system-wide installs:
-          #   /usr/lib/x86_64-linux-gnu/obs-plugins/obs-spark-libre.so
-          #   /usr/share/obs/obs-plugins/obs-spark-libre/locale/*.ini
+          #   /usr/lib/x86_64-linux-gnu/obs-plugins/obs-open-spark.so
+          #   /usr/share/obs/obs-plugins/obs-open-spark/locale/*.ini
           mkdir -p stage/usr/lib/x86_64-linux-gnu/obs-plugins
-          mkdir -p stage/usr/share/obs/obs-plugins/obs-spark-libre/locale
-          cp plugin/build/obs-spark-libre.so \
+          mkdir -p stage/usr/share/obs/obs-plugins/obs-open-spark/locale
+          cp plugin/build/obs-open-spark.so \
               stage/usr/lib/x86_64-linux-gnu/obs-plugins/
           cp -r plugin/data/locale/* \
-              stage/usr/share/obs/obs-plugins/obs-spark-libre/locale/
+              stage/usr/share/obs/obs-plugins/obs-open-spark/locale/
 
           mkdir -p artifact/linux/64bit
-          cp plugin/build/obs-spark-libre.so artifact/linux/64bit/
+          cp plugin/build/obs-open-spark.so artifact/linux/64bit/
           cp -r plugin/data artifact/linux/
 
       - uses: actions/upload-artifact@v4
         with:
-          name: obs-spark-libre-linux-x86_64
+          name: obs-open-spark-linux-x86_64
           path: artifact/linux
 
       - name: Read version
@@ -88,12 +88,12 @@ jobs:
           sudo gem install --no-document fpm
           for kind in rpm deb; do
             fpm -s dir -t $kind \
-                -n obs-spark-libre \
+                -n obs-open-spark \
                 -v "${{ steps.ver.outputs.version }}" \
-                --description "Spark Libre — native OBS plugin (Qt dock + HTTP bridge to the Spark Libre Python backend)." \
+                --description "Open Spark — native OBS plugin (Qt dock + HTTP bridge to the Open Spark Python backend)." \
                 --url "https://github.com/${{ github.repository }}" \
                 --license MIT \
-                --maintainer "Spark Libre Contributors" \
+                --maintainer "Open Spark Contributors" \
                 --architecture x86_64 \
                 --depends obs-studio \
                 --depends "libqt6core6 | libqt6core6t64" \
@@ -107,7 +107,7 @@ jobs:
 
       - uses: actions/upload-artifact@v4
         with:
-          name: obs-spark-libre-linux-packages
+          name: obs-open-spark-linux-packages
           path: packaging-out
 
   flatpak:
@@ -121,8 +121,8 @@ jobs:
       - name: Build Flatpak extension
         uses: flatpak/flatpak-github-actions/flatpak-builder@v6
         with:
-          bundle: obs-spark-libre.flatpak
-          manifest-path: packaging/flatpak/com.sparklibre.Plugin.yml
+          bundle: obs-open-spark.flatpak
+          manifest-path: packaging/flatpak/com.openspark.Plugin.yml
           cache-key: flatpak-builder-${{ github.sha }}
 
   windows:
@@ -165,12 +165,12 @@ jobs:
         shell: pwsh
         run: |
           New-Item -ItemType Directory -Force artifact\windows\obs-plugins\64bit | Out-Null
-          Copy-Item plugin\build\Release\obs-spark-libre.dll artifact\windows\obs-plugins\64bit\
+          Copy-Item plugin\build\Release\obs-open-spark.dll artifact\windows\obs-plugins\64bit\
           Copy-Item -Recurse plugin\data artifact\windows\
 
       - uses: actions/upload-artifact@v4
         with:
-          name: obs-spark-libre-windows-x86_64
+          name: obs-open-spark-windows-x86_64
           path: artifact/windows
 
   macos:
@@ -209,9 +209,100 @@ jobs:
       - name: Stage artifact
         run: |
           mkdir -p artifact/macos
-          cp -r plugin/build/Release/obs-spark-libre.plugin artifact/macos/
+          cp -r plugin/build/Release/obs-open-spark.plugin artifact/macos/
 
       - uses: actions/upload-artifact@v4
         with:
-          name: obs-spark-libre-macos-universal
+          name: obs-open-spark-macos-universal
           path: artifact/macos
+
+  # ---------------------------------------------------------------------------
+  # release: only runs on tag pushes (v0.1.0, v0.2.0, …). Pulls every
+  # platform artifact from the matrix jobs above, packs them, and
+  # attaches them to a fresh GitHub Release. This is the "self-hosted
+  # Flatpak / MVP option C" distribution path — Flathub submission is
+  # intentionally not part of this flow.
+  # ---------------------------------------------------------------------------
+  release:
+    name: GitHub Release
+    needs: [linux, flatpak, windows, macos]
+    if: startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Download every platform artifact
+        uses: actions/download-artifact@v4
+        with:
+          path: dist
+
+      - name: Repack artifacts for the release
+        run: |
+          set -eux
+          mkdir -p release-assets
+
+          # Linux: .so + locale → tarball
+          if [[ -d dist/obs-open-spark-linux-x86_64 ]]; then
+            tar -C dist/obs-open-spark-linux-x86_64 -czf \
+                release-assets/obs-open-spark-linux-x86_64.tar.gz .
+          fi
+
+          # Linux: .rpm + .deb already named correctly, just copy.
+          if [[ -d dist/obs-open-spark-linux-packages ]]; then
+            cp dist/obs-open-spark-linux-packages/* release-assets/
+          fi
+
+          # Windows: .dll + data → zip
+          if [[ -d dist/obs-open-spark-windows-x86_64 ]]; then
+            (cd dist/obs-open-spark-windows-x86_64 \
+             && zip -r ../../release-assets/obs-open-spark-windows-x86_64.zip .)
+          fi
+
+          # macOS: .plugin bundle → tarball (keeps symlinks, perms)
+          if [[ -d dist/obs-open-spark-macos-universal ]]; then
+            tar -C dist/obs-open-spark-macos-universal -czf \
+                release-assets/obs-open-spark-macos-universal.tar.gz .
+          fi
+
+          # Flatpak bundle.
+          for f in dist/**/*.flatpak; do
+            [[ -f "$f" ]] && cp "$f" release-assets/
+          done
+
+          ls -la release-assets
+
+      - name: Publish GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ github.ref_name }}
+          name: ${{ github.ref_name }}
+          generate_release_notes: true
+          fail_on_unmatched_files: false
+          body: |
+            obs-open-spark ${{ github.ref_name }}
+
+            Native OBS plugin half of the Open Spark stack. Pair with the
+            Python backend (Docker compose, see `start.sh` in the repo)
+            for end-to-end usage.
+
+            ## Install
+
+            **Fedora / RHEL / openSUSE**
+            ```bash
+            sudo dnf install ./obs-open-spark-*.rpm
+            ```
+
+            **Debian / Ubuntu**
+            ```bash
+            sudo apt install ./obs-open-spark_*.deb
+            ```
+
+            **Flatpak (only if OBS itself is a Flatpak)**
+            ```bash
+            flatpak install --user obs-open-spark.flatpak
+            ```
+
+            **Windows / macOS / portable Linux** — drop the bundle into
+            your OBS plugins directory (see `packaging/README.md`).
+          files: |
+            release-assets/*

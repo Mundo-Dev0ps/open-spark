@@ -1,6 +1,6 @@
-#include "spark-actions.hpp"
-#include "spark-http.hpp"
-#include "spark-dock.hpp"
+#include "open-spark-actions.hpp"
+#include "open-spark-http.hpp"
+#include "open-spark-dock.hpp"
 
 #include <QAction>
 #include <QApplication>
@@ -24,11 +24,11 @@ namespace {
 
 /// Lazily-allocated HTTP client. Lifetime is tied to QApplication via
 /// the qApp parent so it cleans up at program exit.
-spark::SparkHttp *http_client()
+openspark::OpenSparkHttp *http_client()
 {
-    static spark::SparkHttp *c = nullptr;
+    static openspark::OpenSparkHttp *c = nullptr;
     if (!c) {
-        c = new spark::SparkHttp(qApp);
+        c = new openspark::OpenSparkHttp(qApp);
     }
     return c;
 }
@@ -45,7 +45,7 @@ QWidget *parent_widget()
 
 void open_ui_in_browser()
 {
-    QDesktopServices::openUrl(QUrl(SparkLibreDock::defaultUrl()));
+    QDesktopServices::openUrl(QUrl(OpenSparkDock::defaultUrl()));
 }
 
 void show_status_toast(const QString &title, const QString &body, bool ok)
@@ -74,20 +74,20 @@ void prompt_and_post(const QString &endpoint,
     obj[QStringLiteral("prompt")] = prompt;
     const QByteArray body = QJsonDocument(obj).toJson(QJsonDocument::Compact);
 
-    blog(LOG_INFO, "[obs-spark-libre] POST %s prompt_len=%lld",
+    blog(LOG_INFO, "[obs-open-spark] POST %s prompt_len=%lld",
          endpoint.toUtf8().constData(),
          static_cast<long long>(prompt.size()));
 
     http_client()->postJson(
-        endpoint, body, [endpoint, successKey](const spark::HttpResult &res) {
+        endpoint, body, [endpoint, successKey](const openspark::HttpResult &res) {
             if (!res.ok) {
                 blog(LOG_WARNING,
-                     "[obs-spark-libre] %s failed status=%d err=%s body=%s",
+                     "[obs-open-spark] %s failed status=%d err=%s body=%s",
                      endpoint.toUtf8().constData(), res.status,
                      res.error.toUtf8().constData(),
                      res.body.constData());
                 show_status_toast(
-                    QStringLiteral("Spark Libre"),
+                    QStringLiteral("Open Spark"),
                     QStringLiteral("Backend call failed (%1): %2")
                         .arg(res.status)
                         .arg(QString::fromUtf8(res.body)),
@@ -106,7 +106,7 @@ void prompt_and_post(const QString &endpoint,
             } else {
                 summary = QStringLiteral("Done.");
             }
-            show_status_toast(QStringLiteral("Spark Libre"), summary, true);
+            show_status_toast(QStringLiteral("Open Spark"), summary, true);
         });
 }
 
@@ -132,7 +132,7 @@ void hotkey_generate_overlay_cb(void *, obs_hotkey_id, obs_hotkey_t *, bool pres
         QMetaObject::invokeMethod(qApp, [] {
             prompt_and_post(
                 QStringLiteral("/api/generate"),
-                QStringLiteral("Spark Libre — Generate overlay"),
+                QStringLiteral("Open Spark — Generate overlay"),
                 QStringLiteral("Describe the overlay:"),
                 QStringLiteral("overlay_id"));
         });
@@ -145,7 +145,7 @@ void hotkey_generate_scene_cb(void *, obs_hotkey_id, obs_hotkey_t *, bool presse
         QMetaObject::invokeMethod(qApp, [] {
             prompt_and_post(
                 QStringLiteral("/api/scenes/templates"),
-                QStringLiteral("Spark Libre — Generate scene"),
+                QStringLiteral("Open Spark — Generate scene"),
                 QStringLiteral("Describe the multi-source scene:"),
                 QStringLiteral("scene"));
         });
@@ -175,7 +175,7 @@ QMenu *find_view_menu()
     return nullptr;
 }
 
-/// Find the QDockWidget OBS wrapped around our SparkLibreDock content.
+/// Find the QDockWidget OBS wrapped around our OpenSparkDock content.
 /// obs_frontend_add_dock_by_id uses the registration id as the
 /// QDockWidget object name, so we just look that up.
 QDockWidget *find_spark_dock_widget()
@@ -184,7 +184,7 @@ QDockWidget *find_spark_dock_widget()
     if (!main) {
         return nullptr;
     }
-    auto *dw = main->findChild<QDockWidget *>("spark-libre-dock");
+    auto *dw = main->findChild<QDockWidget *>("open-spark-dock");
     return dw;
 }
 
@@ -198,7 +198,7 @@ void toggle_spark_dock()
         }
     } else {
         blog(LOG_WARNING,
-             "[obs-spark-libre] toggle: dock widget not found");
+             "[obs-open-spark] toggle: dock widget not found");
     }
 }
 
@@ -207,14 +207,14 @@ void install_view_menu_item()
     auto *view = find_view_menu();
     if (!view) {
         blog(LOG_WARNING,
-             "[obs-spark-libre] could not locate View menu — skipping View entry");
+             "[obs-open-spark] could not locate View menu — skipping View entry");
         return;
     }
 
-    // Add a Spark Libre submenu so we can grow it with extra view-only
+    // Add a Open Spark submenu so we can grow it with extra view-only
     // actions later (open inspector, force-refresh, etc.) without
     // cluttering View's top level.
-    g_view_submenu = view->addMenu(QStringLiteral("Spark Libre"));
+    g_view_submenu = view->addMenu(QStringLiteral("Open Spark"));
 
     g_view_action_toggle_dock = g_view_submenu->addAction(
         QStringLiteral("Toggle dock"));
@@ -225,7 +225,7 @@ void install_view_menu_item()
                               [] { open_ui_in_browser(); });
 
     blog(LOG_INFO,
-         "[obs-spark-libre] View → Spark Libre submenu installed");
+         "[obs-open-spark] View → Open Spark submenu installed");
 }
 
 // (Tools-menu items intentionally removed: the dock UI exposes the same
@@ -234,36 +234,36 @@ void install_view_menu_item()
 void install_hotkeys()
 {
     g_hk_open_ui = obs_hotkey_register_frontend(
-        "spark_libre.open_ui",
-        "Spark Libre: open UI",
+        "open_spark.open_ui",
+        "Open Spark: open UI",
         hotkey_open_ui_cb,
         nullptr);
 
     g_hk_generate_overlay = obs_hotkey_register_frontend(
-        "spark_libre.generate_overlay",
-        "Spark Libre: generate overlay (prompt)",
+        "open_spark.generate_overlay",
+        "Open Spark: generate overlay (prompt)",
         hotkey_generate_overlay_cb,
         nullptr);
 
     g_hk_generate_scene = obs_hotkey_register_frontend(
-        "spark_libre.generate_scene",
-        "Spark Libre: generate scene (prompt)",
+        "open_spark.generate_scene",
+        "Open Spark: generate scene (prompt)",
         hotkey_generate_scene_cb,
         nullptr);
 }
 
 }  // namespace
 
-extern "C" void spark_actions_install(void)
+extern "C" void openspark_actions_install(void)
 {
     install_view_menu_item();
     install_hotkeys();
     blog(LOG_INFO,
-         "[obs-spark-libre] View menu + hotkeys installed (backend=%s)",
-         spark::SparkHttp::baseUrl().toUtf8().constData());
+         "[obs-open-spark] View menu + hotkeys installed (backend=%s)",
+         openspark::OpenSparkHttp::baseUrl().toUtf8().constData());
 }
 
-extern "C" void spark_actions_uninstall(void)
+extern "C" void openspark_actions_uninstall(void)
 {
     if (g_hk_open_ui != OBS_INVALID_HOTKEY_ID) {
         obs_hotkey_unregister(g_hk_open_ui);

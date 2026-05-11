@@ -1,17 +1,17 @@
-# RPM spec for the obs-spark-libre native plugin.
+# RPM spec for the obs-open-spark native plugin.
 #
 # CI uses `fpm` (see .github/workflows/plugin-build.yml) which is
 # simpler than maintaining a full spec, but this file is here for
 # distro packagers / Fedora COPR who prefer the native rpmbuild path.
 #
-#   rpmbuild -ba packaging/rpm/obs-spark-libre.spec
+#   rpmbuild -ba packaging/rpm/obs-open-spark.spec
 #
 # Build deps mirror the CI Linux job.
 
-Name:           obs-spark-libre
+Name:           obs-open-spark
 Version:        0.1.0
 Release:        1%{?dist}
-Summary:        Spark Libre — native OBS plugin (dock + bridge to LLM backend)
+Summary:        Open Spark — native OBS plugin (dock + bridge to LLM backend)
 
 License:        MIT
 URL:            https://github.com/mundo-devops/open-spark
@@ -30,8 +30,8 @@ Requires:       qt6-qtbase
 Requires:       qt6-qtbase-gui
 
 %description
-Spark Libre exposes a native Qt dock inside OBS Studio that talks to
-the external Spark Libre Python backend over loopback HTTP. The dock
+Open Spark exposes a native Qt dock inside OBS Studio that talks to
+the external Open Spark Python backend over loopback HTTP. The dock
 generates OBS overlay HTML, scenes and refinements via an LLM, then
 inserts the resulting Browser Sources directly into the running OBS
 session.
@@ -55,9 +55,9 @@ DESTDIR=%{buildroot} cmake --install build
 %files
 %license LICENSE
 %doc README.md plugin/README.md
-%{_libdir}/obs-plugins/obs-spark-libre.so
-%{_datadir}/obs/obs-plugins/obs-spark-libre/
+%{_libdir}/obs-plugins/obs-open-spark.so
+%{_datadir}/obs/obs-plugins/obs-open-spark/
 
 %changelog
-* %(LC_ALL=C date '+%a %b %d %Y') Spark Libre Contributors <noreply@example.com> - 0.1.0-1
+* %(LC_ALL=C date '+%a %b %d %Y') Open Spark Contributors <noreply@example.com> - 0.1.0-1
 - Initial RPM packaging.

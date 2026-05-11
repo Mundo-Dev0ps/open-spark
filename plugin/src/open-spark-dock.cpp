@@ -1,8 +1,8 @@
-// Spark Libre dock implementation — native Qt UI.
+// Open Spark dock implementation — native Qt UI.
 
-#include "spark-dock.hpp"
-#include "spark-actions.hpp"
-#include "spark-http.hpp"
+#include "open-spark-dock.hpp"
+#include "open-spark-actions.hpp"
+#include "open-spark-http.hpp"
 
 #include <QCheckBox>
 #include <QComboBox>
@@ -97,21 +97,21 @@ private:
 
 }  // namespace
 
-QString SparkLibreDock::defaultUrl()
+QString OpenSparkDock::defaultUrl()
 {
-    const QByteArray env = qgetenv("SPARK_DOCK_URL");
+    const QByteArray env = qgetenv("OPENSPARK_DOCK_URL");
     if (!env.isEmpty()) {
         return QString::fromUtf8(env);
     }
     return QString::fromUtf8(SPARK_DEFAULT_URL);
 }
 
-SparkLibreDock::SparkLibreDock(QWidget *parent)
+OpenSparkDock::OpenSparkDock(QWidget *parent)
     : QFrame(parent),
       url_(defaultUrl()),
-      http_(new spark::SparkHttp(this))
+      http_(new openspark::OpenSparkHttp(this))
 {
-    setObjectName("SparkLibreDock");
+    setObjectName("OpenSparkDock");
     setFrameShape(QFrame::NoFrame);
     setMinimumSize(360, 480);
 
@@ -119,7 +119,7 @@ SparkLibreDock::SparkLibreDock(QWidget *parent)
     // the plugin feels like part of the same product instead of an
     // arbitrary Qt widget.
     setStyleSheet(R"qss(
-        QFrame#SparkLibreDock { background: #15171c; color: #e6e8ee; }
+        QFrame#OpenSparkDock { background: #15171c; color: #e6e8ee; }
         QLabel { color: #e6e8ee; }
         QGroupBox {
             border: 1px solid #2a2e38;
@@ -251,7 +251,7 @@ SparkLibreDock::SparkLibreDock(QWidget *parent)
     statusTimer_ = new QTimer(this);
     statusTimer_->setInterval(5000);
     QObject::connect(statusTimer_, &QTimer::timeout, this,
-                     &SparkLibreDock::refreshStatus);
+                     &OpenSparkDock::refreshStatus);
     statusTimer_->start();
 
     // ChatGPT-style thinking indicator: animated braille spinner +
@@ -284,13 +284,13 @@ SparkLibreDock::SparkLibreDock(QWidget *parent)
     refreshSettings();
 }
 
-SparkLibreDock::~SparkLibreDock() = default;
+OpenSparkDock::~OpenSparkDock() = default;
 
 // --------------------------------------------------------------------------
 // UI construction — Input tab
 // --------------------------------------------------------------------------
 
-QWidget *SparkLibreDock::buildInputTab()
+QWidget *OpenSparkDock::buildInputTab()
 {
     auto *scroll = new QScrollArea(this);
     scroll->setWidgetResizable(true);
@@ -429,7 +429,7 @@ QWidget *SparkLibreDock::buildInputTab()
         beginThinking(QStringLiteral("Injecting %1 into OBS…").arg(id));
         http_->postJson(
             QStringLiteral("/api/inject"), body,
-            [this, id, lockRowButtons](const spark::HttpResult &r) {
+            [this, id, lockRowButtons](const openspark::HttpResult &r) {
                 endThinking();
                 lockRowButtons(false);
                 if (r.ok) {
@@ -455,7 +455,7 @@ QWidget *SparkLibreDock::buildInputTab()
         beginThinking(QStringLiteral("LLM thinking — regenerating %1…").arg(id));
         http_->postJson(
             QStringLiteral("/api/overlays/%1/regenerate").arg(id), body,
-            [this, id, lockRowButtons](const spark::HttpResult &r) {
+            [this, id, lockRowButtons](const openspark::HttpResult &r) {
                 endThinking();
                 lockRowButtons(false);
                 if (r.ok) {
@@ -493,7 +493,7 @@ QWidget *SparkLibreDock::buildInputTab()
         beginThinking(QStringLiteral("LLM patching %1…").arg(id));
         http_->postJson(
             QStringLiteral("/api/overlays/%1/refine").arg(id), body,
-            [this, id, lockRowButtons](const spark::HttpResult &r) {
+            [this, id, lockRowButtons](const openspark::HttpResult &r) {
                 endThinking();
                 lockRowButtons(false);
                 if (r.ok) {
@@ -516,7 +516,7 @@ QWidget *SparkLibreDock::buildInputTab()
         beginThinking(QStringLiteral("Deleting %1…").arg(id));
         http_->del(
             QStringLiteral("/api/overlays/%1").arg(id),
-            [this, id, lockRowButtons](const spark::HttpResult &r) {
+            [this, id, lockRowButtons](const openspark::HttpResult &r) {
                 endThinking();
                 lockRowButtons(false);
                 if (r.ok) {
@@ -533,7 +533,7 @@ QWidget *SparkLibreDock::buildInputTab()
     QObject::connect(deleteAllBtn, &QPushButton::clicked, this,
                      [this, lockRowButtons]() {
         const auto reply = QMessageBox::warning(
-            this, QStringLiteral("Spark Libre"),
+            this, QStringLiteral("Open Spark"),
             QStringLiteral("Delete EVERY overlay (HTML files + index)?\n"
                            "This cannot be undone."),
             QMessageBox::Yes | QMessageBox::Cancel,
@@ -544,7 +544,7 @@ QWidget *SparkLibreDock::buildInputTab()
         beginThinking(QStringLiteral("Wiping all overlays…"));
         http_->del(
             QStringLiteral("/api/overlays"),
-            [this, lockRowButtons](const spark::HttpResult &r) {
+            [this, lockRowButtons](const openspark::HttpResult &r) {
                 endThinking();
                 lockRowButtons(false);
                 if (r.ok) {
@@ -592,7 +592,7 @@ QWidget *SparkLibreDock::buildInputTab()
 // UI construction — Settings tab
 // --------------------------------------------------------------------------
 
-QWidget *SparkLibreDock::buildSettingsTab()
+QWidget *OpenSparkDock::buildSettingsTab()
 {
     auto *scroll = new QScrollArea(this);
     scroll->setWidgetResizable(true);
@@ -658,12 +658,12 @@ QWidget *SparkLibreDock::buildSettingsTab()
     obsForm->addRow(QStringLiteral("Port:"), settingsObsPortSpin_);
     settingsSceneNameEdit_ = new QLineEdit(obsBox);
     settingsSceneNameEdit_->setPlaceholderText(
-        QStringLiteral("Spark Libre"));
+        QStringLiteral("Open Spark"));
     obsForm->addRow(QStringLiteral("Scene name:"), settingsSceneNameEdit_);
 
     auto *obsHint = new QLabel(
         QStringLiteral("If \"OBS: offline\" above: Tools → WebSocket Server "
-                       "Settings → Enable, password = SPARK_OBS_PASSWORD."),
+                       "Settings → Enable, password = OPENSPARK_OBS_PASSWORD."),
         obsBox);
     obsHint->setStyleSheet("color: #39ff8a; font-size: 11px;");
     obsHint->setWordWrap(true);
@@ -696,14 +696,14 @@ QWidget *SparkLibreDock::buildSettingsTab()
     return scroll;
 }
 
-void SparkLibreDock::wire()
+void OpenSparkDock::wire()
 {
     QObject::connect(generateBtn_, &QPushButton::clicked, this,
-                     &SparkLibreDock::doGenerate);
+                     &OpenSparkDock::doGenerate);
     QObject::connect(injectLastBtn_, &QPushButton::clicked, this,
-                     &SparkLibreDock::doInjectLast);
+                     &OpenSparkDock::doInjectLast);
     QObject::connect(sceneGenerateBtn_, &QPushButton::clicked, this,
-                     &SparkLibreDock::doGenerateScene);
+                     &OpenSparkDock::doGenerateScene);
 
     // Disable Generate buttons while their prompt is empty so the user
     // doesn't fire a no-op LLM call against the backend.
@@ -719,18 +719,18 @@ void SparkLibreDock::wire()
     syncGen();
     syncScene();
     QObject::connect(refreshOverlaysBtn_, &QPushButton::clicked, this,
-                     &SparkLibreDock::refreshOverlays);
+                     &OpenSparkDock::refreshOverlays);
     QObject::connect(reloadBtn_, &QPushButton::clicked, this,
-                     &SparkLibreDock::refreshStatus);
+                     &OpenSparkDock::refreshStatus);
     QObject::connect(openBrowserBtn_, &QPushButton::clicked, this,
-                     &SparkLibreDock::onOpenInBrowser);
+                     &OpenSparkDock::onOpenInBrowser);
     if (settingsSaveBtn_) {
         QObject::connect(settingsSaveBtn_, &QPushButton::clicked, this,
-                         &SparkLibreDock::saveSettings);
+                         &OpenSparkDock::saveSettings);
     }
     if (settingsReloadBtn_) {
         QObject::connect(settingsReloadBtn_, &QPushButton::clicked, this,
-                         &SparkLibreDock::refreshSettings);
+                         &OpenSparkDock::refreshSettings);
     }
     if (settingsKeySaveBtn_) {
         QObject::connect(settingsKeySaveBtn_, &QPushButton::clicked, this, [this]() {
@@ -751,7 +751,7 @@ void SparkLibreDock::wire()
             beginThinking(QStringLiteral("Saving %1 API key…").arg(provider));
             http_->postJson(
                 QStringLiteral("/api/secrets"), body,
-                [this, provider](const spark::HttpResult &r) {
+                [this, provider](const openspark::HttpResult &r) {
                     endThinking();
                     settingsKeySaveBtn_->setEnabled(true);
                     if (r.ok) {
@@ -769,11 +769,11 @@ void SparkLibreDock::wire()
     }
 }
 
-void SparkLibreDock::refreshSettings()
+void OpenSparkDock::refreshSettings()
 {
     http_->getJson(
         QStringLiteral("/api/settings"),
-        [this](const spark::HttpResult &r) {
+        [this](const openspark::HttpResult &r) {
             if (!r.ok) {
                 appendLog(QStringLiteral("Settings reload failed (%1)").arg(r.status));
                 return;
@@ -794,7 +794,7 @@ void SparkLibreDock::refreshSettings()
         });
 }
 
-void SparkLibreDock::saveSettings()
+void OpenSparkDock::saveSettings()
 {
     QJsonObject obj;
     obj.insert(QStringLiteral("default_model"), settingsModelEdit_->text());
@@ -809,7 +809,7 @@ void SparkLibreDock::saveSettings()
     beginThinking(QStringLiteral("Saving settings…"));
     http_->putJson(
         QStringLiteral("/api/settings"), body,
-        [this](const spark::HttpResult &r) {
+        [this](const openspark::HttpResult &r) {
             endThinking();
             settingsSaveBtn_->setEnabled(true);
             if (r.ok) {
@@ -827,7 +827,7 @@ void SparkLibreDock::saveSettings()
 // Backend interactions
 // --------------------------------------------------------------------------
 
-void SparkLibreDock::setStatusLine(const QString &text, bool ok)
+void OpenSparkDock::setStatusLine(const QString &text, bool ok)
 {
     statusLabel_->setText(text);
     // Keep the bg/border style from the constructor; only swap color.
@@ -838,14 +838,14 @@ void SparkLibreDock::setStatusLine(const QString &text, bool ok)
     ).arg(ok ? "#39ff8a" : "#ff5470"));
 }
 
-void SparkLibreDock::appendLog(const QString &text)
+void OpenSparkDock::appendLog(const QString &text)
 {
     if (!logArea_) return;
     const QString stamp = QDateTime::currentDateTime().toString("HH:mm:ss");
     logArea_->appendPlainText(QStringLiteral("[%1] %2").arg(stamp, text));
 }
 
-void SparkLibreDock::beginThinking(const QString &label)
+void OpenSparkDock::beginThinking(const QString &label)
 {
     thinkingCount_++;
     thinkingMessage_ = label.isEmpty() ? QStringLiteral("Thinking…") : label;
@@ -858,7 +858,7 @@ void SparkLibreDock::beginThinking(const QString &label)
     }
 }
 
-void SparkLibreDock::endThinking()
+void OpenSparkDock::endThinking()
 {
     thinkingCount_ = std::max(0, thinkingCount_ - 1);
     if (thinkingCount_ > 0) return;
@@ -870,10 +870,10 @@ void SparkLibreDock::endThinking()
     thinkingMessage_.clear();
 }
 
-void SparkLibreDock::refreshStatus()
+void OpenSparkDock::refreshStatus()
 {
     http_->getJson(QStringLiteral("/api/status"),
-                   [this](const spark::HttpResult &r) {
+                   [this](const openspark::HttpResult &r) {
                        if (!r.ok) {
                            setStatusLine(QStringLiteral("backend offline"), false);
                            return;
@@ -891,10 +891,10 @@ void SparkLibreDock::refreshStatus()
                    });
 }
 
-void SparkLibreDock::refreshStyles()
+void OpenSparkDock::refreshStyles()
 {
     http_->getJson(QStringLiteral("/api/styles"),
-                   [this](const spark::HttpResult &r) {
+                   [this](const openspark::HttpResult &r) {
                        if (!r.ok) return;
                        const auto arr = QJsonDocument::fromJson(r.body).array();
                        for (auto *combo : {styleCombo_, sceneStyleCombo_}) {
@@ -910,10 +910,10 @@ void SparkLibreDock::refreshStyles()
                    });
 }
 
-void SparkLibreDock::refreshOverlays()
+void OpenSparkDock::refreshOverlays()
 {
     http_->getJson(QStringLiteral("/api/overlays"),
-                   [this](const spark::HttpResult &r) {
+                   [this](const openspark::HttpResult &r) {
                        if (!r.ok) return;
                        const auto arr = QJsonDocument::fromJson(r.body).array();
                        overlaysList_->clear();
@@ -932,7 +932,7 @@ void SparkLibreDock::refreshOverlays()
                    });
 }
 
-void SparkLibreDock::doGenerate()
+void OpenSparkDock::doGenerate()
 {
     const QString prompt = promptEdit_->toPlainText().trimmed();
     if (prompt.isEmpty()) return;
@@ -954,7 +954,7 @@ void SparkLibreDock::doGenerate()
                       .arg(style.isEmpty() ? "no style" : style));
     http_->postJson(
         QStringLiteral("/api/generate"), body,
-        [this](const spark::HttpResult &r) {
+        [this](const openspark::HttpResult &r) {
             endThinking();
             generateBtn_->setEnabled(true);
             generateBtn_->setText(QStringLiteral("Generate"));
@@ -975,7 +975,7 @@ void SparkLibreDock::doGenerate()
         });
 }
 
-void SparkLibreDock::doGenerateScene()
+void OpenSparkDock::doGenerateScene()
 {
     const QString prompt = scenePromptEdit_->toPlainText().trimmed();
     if (prompt.isEmpty()) return;
@@ -995,7 +995,7 @@ void SparkLibreDock::doGenerateScene()
                       .arg(style.isEmpty() ? "no style" : style));
     http_->postJson(
         QStringLiteral("/api/scenes/templates"), body,
-        [this](const spark::HttpResult &r) {
+        [this](const openspark::HttpResult &r) {
             endThinking();
             sceneGenerateBtn_->setEnabled(true);
             sceneGenerateBtn_->setText(QStringLiteral("Generate scene"));
@@ -1016,7 +1016,7 @@ void SparkLibreDock::doGenerateScene()
         });
 }
 
-void SparkLibreDock::doInjectLast()
+void OpenSparkDock::doInjectLast()
 {
     if (lastOverlayId_.isEmpty()) return;
     QJsonObject obj{{"overlay_id", lastOverlayId_}};
@@ -1025,7 +1025,7 @@ void SparkLibreDock::doInjectLast()
     injectLastBtn_->setEnabled(false);
     beginThinking(QStringLiteral("Injecting overlay into OBS…"));
     http_->postJson(QStringLiteral("/api/inject"), body,
-                    [this](const spark::HttpResult &r) {
+                    [this](const openspark::HttpResult &r) {
                         endThinking();
                         injectLastBtn_->setEnabled(!lastOverlayId_.isEmpty());
                         if (r.ok) {
@@ -1038,7 +1038,7 @@ void SparkLibreDock::doInjectLast()
                     });
 }
 
-void SparkLibreDock::onOpenInBrowser()
+void OpenSparkDock::onOpenInBrowser()
 {
     QDesktopServices::openUrl(QUrl(url_));
 }
@@ -1047,19 +1047,19 @@ void SparkLibreDock::onOpenInBrowser()
 // C glue
 // --------------------------------------------------------------------------
 
-static SparkLibreDock *g_dock_instance = nullptr;
+static OpenSparkDock *g_dock_instance = nullptr;
 static bool g_dock_added = false;
 
-static void spark_actually_add_dock()
+static void openspark_actually_add_dock()
 {
     if (g_dock_added) {
         return;
     }
-    auto *dock = new SparkLibreDock(nullptr);
+    auto *dock = new OpenSparkDock(nullptr);
 #if LIBOBS_API_VER >= MAKE_SEMANTIC_VERSION(30, 0, 0)
     const bool ok = obs_frontend_add_dock_by_id(
-        "spark-libre-dock",
-        "Spark Libre",
+        "open-spark-dock",
+        "Open Spark",
         dock);
     if (!ok) {
         blog(LOG_WARNING, "obs_frontend_add_dock_by_id returned false");
@@ -1067,8 +1067,8 @@ static void spark_actually_add_dock()
         return;
     }
 #else
-    auto *wrapper = new QDockWidget("Spark Libre");
-    wrapper->setObjectName("spark-libre-dock");
+    auto *wrapper = new QDockWidget("Open Spark");
+    wrapper->setObjectName("open-spark-dock");
     wrapper->setWidget(dock);
     obs_frontend_add_dock(wrapper);
 #endif
@@ -1081,7 +1081,7 @@ static void spark_actually_add_dock()
     // plain right-edge dock. Subsequent OBS launches restore whatever
     // the user moved it to via Qt's saveState/restoreState path.
     auto *main = static_cast<QMainWindow *>(obs_frontend_get_main_window());
-    QDockWidget *dw = main ? main->findChild<QDockWidget *>("spark-libre-dock")
+    QDockWidget *dw = main ? main->findChild<QDockWidget *>("open-spark-dock")
                            : nullptr;
     if (dw) {
         dw->setAllowedAreas(Qt::AllDockWidgetAreas);
@@ -1104,12 +1104,12 @@ static void spark_actually_add_dock()
             if (anchor) {
                 main->tabifyDockWidget(anchor, dw);
                 blog(LOG_INFO,
-                     "[obs-spark-libre] tabified with %s on right edge",
+                     "[obs-open-spark] tabified with %s on right edge",
                      anchor->objectName().toUtf8().constData());
             } else {
                 main->addDockWidget(Qt::RightDockWidgetArea, dw);
                 blog(LOG_INFO,
-                     "[obs-spark-libre] attached to right dock area");
+                     "[obs-open-spark] attached to right dock area");
             }
             dw->setFloating(false);
         }
@@ -1117,29 +1117,29 @@ static void spark_actually_add_dock()
         dw->raise();
     } else {
         blog(LOG_WARNING,
-             "[obs-spark-libre] could not find QDockWidget post-register");
+             "[obs-open-spark] could not find QDockWidget post-register");
     }
-    blog(LOG_INFO, "[obs-spark-libre] dock registered (url=%s)",
+    blog(LOG_INFO, "[obs-open-spark] dock registered (url=%s)",
          dock->defaultUrl().toUtf8().constData());
 }
 
 static void on_frontend_event(enum obs_frontend_event event, void *)
 {
     if (event == OBS_FRONTEND_EVENT_FINISHED_LOADING) {
-        spark_actually_add_dock();
-        spark_actions_install();
+        openspark_actually_add_dock();
+        openspark_actions_install();
     }
 }
 
-extern "C" bool spark_dock_register(void)
+extern "C" bool openspark_dock_register(void)
 {
     obs_frontend_add_event_callback(on_frontend_event, nullptr);
     blog(LOG_INFO,
-         "[obs-spark-libre] queued dock registration for FINISHED_LOADING");
+         "[obs-open-spark] queued dock registration for FINISHED_LOADING");
     return true;
 }
 
-extern "C" void spark_dock_unregister(void)
+extern "C" void openspark_dock_unregister(void)
 {
     obs_frontend_remove_event_callback(on_frontend_event, nullptr);
     g_dock_instance = nullptr;

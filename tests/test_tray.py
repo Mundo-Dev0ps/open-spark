@@ -15,7 +15,7 @@ from typing import Iterator
 
 import pytest
 
-from spark_libre import tray
+from open_spark import tray
 
 
 def _free_port() -> int:

@@ -10,22 +10,22 @@ from typing import Iterator
 
 import pytest
 
-from spark_libre import config as cfg_mod
-from spark_libre import llm as llm_mod
-from spark_libre.config import Settings
-from spark_libre.main import create_app
-from spark_libre.overlays import OverlayStore
+from open_spark import config as cfg_mod
+from open_spark import llm as llm_mod
+from open_spark.config import Settings
+from open_spark.main import create_app
+from open_spark.overlays import OverlayStore
 
 
 @pytest.fixture
 def tmp_app_dir(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
-    """Redirect Spark Libre's data dir to a tmp path for the duration of the test."""
+    """Redirect Open Spark's data dir to a tmp path for the duration of the test."""
     monkeypatch.setattr(cfg_mod, "app_data_dir", lambda: tmp_path)
     monkeypatch.setattr(cfg_mod, "overlays_dir", lambda: (tmp_path / "overlays"))
     (tmp_path / "overlays").mkdir(parents=True, exist_ok=True)
     monkeypatch.setattr(cfg_mod, "USER_CONFIG_PATH", tmp_path / "config.json")
     # Also redirect the routes module's import-time alias.
-    from spark_libre.api import routes
+    from open_spark.api import routes
     monkeypatch.setattr(routes, "USER_CONFIG_PATH", tmp_path / "config.json")
     return tmp_path
 

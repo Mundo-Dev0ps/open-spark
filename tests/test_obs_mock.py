@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import pytest
 
-from spark_libre.obs_client import MockOBSClient
+from open_spark.obs_client import MockOBSClient
 
 
 @pytest.mark.asyncio
@@ -24,7 +24,7 @@ async def test_upsert_creates_then_updates():
 
     first = await obs.upsert_browser_source("ovr", "http://127.0.0.1:8765/overlays/a.html")
     assert first["mock"] is True
-    assert first["scene"] == "Spark Libre"
+    assert first["scene"] == "Open Spark"
     assert obs.sources["ovr"].url.endswith("a.html")
 
     await obs.upsert_browser_source("ovr", "http://127.0.0.1:8765/overlays/b.html")

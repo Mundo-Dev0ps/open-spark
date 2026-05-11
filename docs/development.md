@@ -7,7 +7,7 @@ real host OBS untouched. Tested on Linux + Wayland + AMD/Intel iGPU.
 
 ```bash
 cp .env.compose.example .env
-# Edit .env: set SPARK_OBS_PASSWORD and one *_API_KEY
+# Edit .env: set OPENSPARK_OBS_PASSWORD and one *_API_KEY
 docker compose up --build
 xdg-open http://127.0.0.1:8765
 ```
@@ -43,7 +43,7 @@ when `nvidia-container-toolkit` is installed.
 
 ```bash
 pip install -e ".[dev]"
-spark-libre --mock --reload
+open-spark --mock --reload
 ```
 
 Mock mode replaces the OBS WebSocket client with `MockOBSClient`, an
@@ -83,9 +83,9 @@ Once OBS is up:
 2. Save the password to keyring on the host (the container shares the
    host's network, but the keyring lives on the host):
    ```bash
-   python -c "import keyring; keyring.set_password('spark-libre','obs-ws-password','PASSWORD')"
+   python -c "import keyring; keyring.set_password('open-spark','obs-ws-password','PASSWORD')"
    ```
-3. Run `spark-libre` on the host. Lifespan logs
+3. Run `open-spark` on the host. Lifespan logs
    `connected to OBS WebSocket`.
 4. Generate an overlay in the dock; click Inject.
 
@@ -105,7 +105,7 @@ host GPU/audio drivers, only OBS state is segregated.
 ## Install the dock into the portable OBS
 
 ```bash
-spark-libre-install-dock --config-dir ./.portable-obs/config/obs-studio
+open-spark-install-dock --config-dir ./.portable-obs/config/obs-studio
 ```
 
 (`--list-candidates` prints the auto-detected dirs.)
@@ -113,8 +113,8 @@ spark-libre-install-dock --config-dir ./.portable-obs/config/obs-studio
 ## Layout cheatsheet
 
 ```
-src/spark_libre/
-  __main__.py        spark-libre CLI
+src/open_spark/
+  __main__.py        open-spark CLI
   main.py            FastAPI factory + lifespan
   config.py          pathlib-only path resolution per OS
   secrets_store.py   keyring wrapper
@@ -147,4 +147,4 @@ Tests use `MockOBSClient`, never touch real OBS, never hit the network.
 LLM calls are stubbed via dependency injection.
 
 `tests/test_secrets_env.py` covers the env-var fallback used inside
-containers when `SPARK_USE_ENV_SECRETS=1`.
+containers when `OPENSPARK_USE_ENV_SECRETS=1`.

@@ -1,12 +1,12 @@
 # syntax=docker/dockerfile:1.7
 #
-# Spark Libre backend image.
+# Open Spark backend image.
 # Multi-stage:
 #   builder  — installs deps + dev tools into /venv (editable install)
 #   dev      — builder result + tests, used for TDD via `docker compose run`
 #   runtime  — slim, non-root, healthcheck, default target for `compose up`
 #
-# Secrets are env-driven inside the container (SPARK_USE_ENV_SECRETS=1),
+# Secrets are env-driven inside the container (OPENSPARK_USE_ENV_SECRETS=1),
 # so we never depend on the host's keyring / DBus.
 
 ARG PYTHON_VERSION=3.12
@@ -39,7 +39,7 @@ COPY --from=builder /venv /venv
 COPY --from=builder /app /app
 COPY tests ./tests
 ENV PATH=/venv/bin:$PATH \
-    SPARK_USE_ENV_SECRETS=1 \
+    OPENSPARK_USE_ENV_SECRETS=1 \
     XDG_DATA_HOME=/app/.local/share
 
 RUN set -eux; \
@@ -49,7 +49,7 @@ RUN set -eux; \
     useradd -u "${UID}" -g "${GID}" -d /app -s /bin/sh -M spark 2>/dev/null \
         || usermod -l spark -d /app "$(id -un ${UID})" 2>/dev/null \
         || true; \
-    mkdir -p /app/.local/share/spark-libre/overlays; \
+    mkdir -p /app/.local/share/open-spark/overlays; \
     chown -R "${UID}:${GID}" /app
 
 USER spark
@@ -63,7 +63,7 @@ ARG GID=1000
 COPY --from=builder /venv /venv
 COPY --from=builder /app /app
 ENV PATH=/venv/bin:$PATH \
-    SPARK_USE_ENV_SECRETS=1 \
+    OPENSPARK_USE_ENV_SECRETS=1 \
     XDG_DATA_HOME=/app/.local/share
 
 # UID/GID must match the host user that owns the bind-mounted .data/
@@ -77,7 +77,7 @@ RUN set -eux; \
     useradd -u "${UID}" -g "${GID}" -d /app -s /bin/sh -M spark 2>/dev/null \
         || usermod -l spark -d /app "$(id -un ${UID})" 2>/dev/null \
         || true; \
-    mkdir -p /app/.local/share/spark-libre/overlays; \
+    mkdir -p /app/.local/share/open-spark/overlays; \
     chown -R "${UID}:${GID}" /app
 
 USER spark
@@ -87,4 +87,4 @@ HEALTHCHECK --interval=10s --timeout=3s --start-period=5s --retries=3 \
     CMD python -c "import sys, urllib.request; \
 sys.exit(0 if urllib.request.urlopen('http://127.0.0.1:8765/api/status', timeout=2).status == 200 else 1)"
 
-CMD ["spark-libre"]
+CMD ["open-spark"]

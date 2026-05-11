@@ -1,8 +1,8 @@
 cmake_minimum_required(VERSION 3.22)
-project(obs-spark-libre VERSION 0.1.0 LANGUAGES C CXX)
+project(obs-open-spark VERSION 0.1.0 LANGUAGES C CXX)
 
 #
-# obs-spark-libre — thin native OBS plugin that hosts the Spark Libre web
+# obs-open-spark — thin native OBS plugin that hosts the Open Spark web
 # UI as a real OBS dock and talks to the external Python backend over
 # loopback HTTP.
 #
@@ -35,11 +35,11 @@ find_package(Qt6 REQUIRED COMPONENTS Core Gui Widgets Network)
 # set BEFORE QGuiApplication construction — and as a plugin we load
 # too late for that. Until we have a workaround in place, the default
 # build is the fallback path: a status label + an "Open in browser"
-# button. Override with `-DSPARK_WITH_WEBENGINE=ON` once the OpenGL
+# button. Override with `-DOPENSPARK_WITH_WEBENGINE=ON` once the OpenGL
 # context issue is resolved.
-option(SPARK_WITH_WEBENGINE "Embed Qt WebEngine inside the dock (unstable)" OFF)
+option(OPENSPARK_WITH_WEBENGINE "Embed Qt WebEngine inside the dock (unstable)" OFF)
 
-if(SPARK_WITH_WEBENGINE)
+if(OPENSPARK_WITH_WEBENGINE)
     find_package(Qt6 REQUIRED COMPONENTS WebEngineWidgets)
     set(SPARK_HAS_WEBENGINE ON)
     message(STATUS "Qt6 WebEngineWidgets enabled (experimental, may crash)")
@@ -50,17 +50,17 @@ endif()
 
 # --- Plugin target --------------------------------------------------------
 
-set(PLUGIN_NAME obs-spark-libre)
+set(PLUGIN_NAME obs-open-spark)
 
 add_library(${PLUGIN_NAME} MODULE
     src/plugin-main.c
-    src/spark-dock.cpp
-    src/spark-dock.hpp
-    src/spark-actions.cpp
-    src/spark-actions.hpp
-    src/spark-http.cpp
-    src/spark-http.hpp
-    src/spark-websocket-bootstrap.cpp
+    src/open-spark-dock.cpp
+    src/open-spark-dock.hpp
+    src/open-spark-actions.cpp
+    src/open-spark-actions.hpp
+    src/open-spark-http.cpp
+    src/open-spark-http.hpp
+    src/open-spark-websocket-bootstrap.cpp
 )
 
 target_compile_definitions(${PLUGIN_NAME} PRIVATE

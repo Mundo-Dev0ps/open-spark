@@ -1,4 +1,4 @@
-# Spark Libre — Handoff Prompt
+# Open Spark — Handoff Prompt
 
 Pegar este archivo entero al iniciar otro agente. Incluye contexto
 original + estado actual del repo + próximos pasos.
@@ -7,7 +7,7 @@ original + estado actual del repo + próximos pasos.
 
 ## Brief original
 
-Plugin para OBS llamado **Spark Libre** (nombre provisional).
+Plugin para OBS llamado **Open Spark** (nombre provisional).
 
 Backend en Python que el usuario instala como app externa. La UI vive
 dentro de OBS como Custom Browser Dock apuntando a
@@ -72,11 +72,11 @@ Ubicación: `/home/mundo-devops/mundo-devops/repos/apps/open-spark/`
 
 ```
 open-spark/
-├── pyproject.toml          # spark-libre + spark-libre-install-dock entry points
+├── pyproject.toml          # open-spark + open-spark-install-dock entry points
 ├── README.md
 ├── .gitignore
 ├── .env.example
-├── src/spark_libre/
+├── src/open_spark/
 │   ├── __main__.py         # CLI: --mock / --reload / --port
 │   ├── main.py             # FastAPI factory + lifespan, mount /ui, redirect /
 │   ├── config.py           # Settings (pydantic), pathlib OBS dir detect
@@ -114,7 +114,7 @@ open-spark/
 
 - Estructura completa, package instalable (`pip install -e ".[dev]"`)
 - 15/15 tests pasan (`pytest -q`)
-- `spark-libre --mock` arranca, `/api/status`, `/api/generate`,
+- `open-spark --mock` arranca, `/api/status`, `/api/generate`,
   `/api/inject`, `/api/overlays`, `/api/settings`, `/api/secrets`
   responden
 - UI vanilla en `/ui/` (index + settings, JS llamando los endpoints)
@@ -152,8 +152,8 @@ Por orden sugerido:
    ```bash
    ./scripts/run_obs_container.sh
    # OBS: Tools → WebSocket → Enable, password "test"
-   python -c "import keyring; keyring.set_password('spark-libre','obs-ws-password','test')"
-   spark-libre
+   python -c "import keyring; keyring.set_password('open-spark','obs-ws-password','test')"
+   open-spark
    # http://127.0.0.1:8765 → generar overlay → Inject
    ```
 
@@ -182,7 +182,7 @@ Por orden sugerido:
 6. **OpenAPI spec**: FastAPI ya genera `/api/docs`; añadir un export
    estático `openapi.yaml` y validarlo en CI.
 
-7. **Ollama local**: probar `SPARK_LLM_BASE_URL=http://127.0.0.1:11434`
+7. **Ollama local**: probar `OPENSPARK_LLM_BASE_URL=http://127.0.0.1:11434`
    con `ollama/llama3.1` end-to-end y documentarlo.
 
 ---

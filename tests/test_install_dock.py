@@ -6,7 +6,7 @@ import configparser
 import json
 from pathlib import Path
 
-from spark_libre.scripts.install_dock import install
+from open_spark.scripts.install_dock import install
 
 
 def _read_entries(path: Path) -> list[dict]:
@@ -17,16 +17,16 @@ def _read_entries(path: Path) -> list[dict]:
 
 
 def test_install_creates_entry(tmp_path: Path):
-    install(name="Spark Libre", url="http://127.0.0.1:8765", config_dir=tmp_path)
+    install(name="Open Spark", url="http://127.0.0.1:8765", config_dir=tmp_path)
     entries = _read_entries(tmp_path / "global.ini")
-    assert any(e["title"] == "Spark Libre" for e in entries)
+    assert any(e["title"] == "Open Spark" for e in entries)
 
 
 def test_install_idempotent(tmp_path: Path):
     install(config_dir=tmp_path)
     install(config_dir=tmp_path)
     entries = _read_entries(tmp_path / "global.ini")
-    spark_entries = [e for e in entries if e["title"] == "Spark Libre"]
+    spark_entries = [e for e in entries if e["title"] == "Open Spark"]
     assert len(spark_entries) == 1
 
 
@@ -40,4 +40,4 @@ def test_install_preserves_other_docks(tmp_path: Path):
     install(config_dir=tmp_path)
     entries = _read_entries(ini)
     titles = {e["title"] for e in entries}
-    assert {"Other", "Spark Libre"} <= titles
+    assert {"Other", "Open Spark"} <= titles

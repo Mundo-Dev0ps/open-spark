@@ -1,4 +1,4 @@
-"""Native desktop wrapper around the Spark Libre web UI.
+"""Native desktop wrapper around the Open Spark web UI.
 
 Why this exists:
 * The backend is a local FastAPI server. By itself it requires the user
@@ -18,8 +18,8 @@ Runtime model:
 
 Install (host, not in the container):
 
-    pip install --user "spark-libre[tray]"
-    spark-libre-tray
+    pip install --user "open-spark[tray]"
+    open-spark-tray
 """
 
 from __future__ import annotations
@@ -37,7 +37,7 @@ log = logging.getLogger(__name__)
 
 DEFAULT_URL = "http://127.0.0.1:8765/ui/"
 STATUS_URL = "http://127.0.0.1:8765/api/status"
-WINDOW_TITLE = "Spark Libre"
+WINDOW_TITLE = "Open Spark"
 
 
 # --- Importable helpers (kept testable without GUI deps) -------------------
@@ -70,7 +70,7 @@ def _make_icon_image(size: int = 64):
 
     Picks the brand accent color used by the web UI so the system tray
     icon matches. Falls back to a plain square if Pillow is not yet
-    available — this lets ``import spark_libre.tray`` work in the test
+    available — this lets ``import open_spark.tray`` work in the test
     image too.
     """
     try:
@@ -95,10 +95,10 @@ def _make_icon_image(size: int = 64):
 # --- Entry point ----------------------------------------------------------
 
 def _parse_args(argv: list[str]) -> argparse.Namespace:
-    p = argparse.ArgumentParser(prog="spark-libre-tray", description=__doc__)
+    p = argparse.ArgumentParser(prog="open-spark-tray", description=__doc__)
     p.add_argument(
         "--url",
-        default=os.environ.get("SPARK_TRAY_URL", DEFAULT_URL),
+        default=os.environ.get("OPENSPARK_TRAY_URL", DEFAULT_URL),
         help="Backend UI URL to load (default: %(default)s)",
     )
     p.add_argument(
@@ -119,14 +119,14 @@ def main(argv: list[str] | None = None) -> int:
     args = _parse_args(list(argv) if argv is not None else sys.argv[1:])
 
     logging.basicConfig(
-        level=os.environ.get("SPARK_LOG_LEVEL", "INFO").upper(),
+        level=os.environ.get("OPENSPARK_LOG_LEVEL", "INFO").upper(),
         format="%(asctime)s %(levelname)s %(name)s :: %(message)s",
     )
 
     log.info("waiting for backend at %s", STATUS_URL)
     if not _wait_for_backend(STATUS_URL, timeout=args.wait_timeout):
         sys.stderr.write(
-            "Spark Libre backend is not reachable. Start it first:\n"
+            "Open Spark backend is not reachable. Start it first:\n"
             "    ./start.sh up-d\n"
         )
         return 2
@@ -139,7 +139,7 @@ def main(argv: list[str] | None = None) -> int:
     except ImportError:
         sys.stderr.write(
             "Missing GUI dependencies. Install the tray extra:\n"
-            "    pip install --user 'spark-libre[tray]'\n"
+            "    pip install --user 'open-spark[tray]'\n"
         )
         return 3
 
@@ -197,7 +197,7 @@ def main(argv: list[str] | None = None) -> int:
                     pystray.Menu.SEPARATOR,
                     pystray.MenuItem("Quit", _quit),
                 )
-                icon = pystray.Icon("spark-libre", icon_img, WINDOW_TITLE, menu)
+                icon = pystray.Icon("open-spark", icon_img, WINDOW_TITLE, menu)
                 threading.Thread(target=icon.run, daemon=True).start()
 
     log.info("opening native window at %s", args.url)

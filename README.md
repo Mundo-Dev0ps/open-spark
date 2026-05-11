@@ -1,4 +1,4 @@
-# Spark Libre
+# Open Spark
 
 Generate OBS overlays from natural language. Local-first. LLM-agnostic.
 
@@ -18,7 +18,7 @@ No telemetry. No cloud. Your API keys live in your OS keyring.
 
 ```
 +---------------------------+         +-----------------------+
-|   OBS Studio              |  WS     |  Spark Libre backend  |
+|   OBS Studio              |  WS     |  Open Spark backend  |
 |   - Custom Browser Dock --|---HTTP->|  FastAPI on 127.0.0.1 |
 |   - Browser Source     <--|---------|  serves /overlays/*   |
 +---------------------------+         |  obs-websocket client |
@@ -30,14 +30,14 @@ No telemetry. No cloud. Your API keys live in your OS keyring.
 ## Quick start (dev)
 
 ```bash
-git clone https://github.com/youruser/open-spark spark-libre
-cd spark-libre
+git clone https://github.com/youruser/open-spark open-spark
+cd open-spark
 python -m venv .venv && source .venv/bin/activate   # Linux/macOS
 # .venv\Scripts\activate                            # Windows PowerShell
 pip install -e ".[dev]"
 
 # 1. Run backend in mock mode (no OBS needed)
-spark-libre --mock
+open-spark --mock
 
 # 2. Open http://127.0.0.1:8765 in any browser to drive it
 ```
@@ -45,13 +45,13 @@ spark-libre --mock
 To run against real OBS:
 
 1. OBS → Tools → WebSocket Server Settings → Enable, set password.
-2. Store the password: `python -c "import keyring; keyring.set_password('spark-libre','obs-ws-password','YOUR_PASSWORD')"`
-3. `spark-libre`
+2. Store the password: `python -c "import keyring; keyring.set_password('open-spark','obs-ws-password','YOUR_PASSWORD')"`
+3. `open-spark`
 
 ## Install the OBS dock
 
 ```bash
-spark-libre-install-dock
+open-spark-install-dock
 ```
 
 Edits OBS `global.ini` (Linux: `~/.config/obs-studio/`, Flatpak:
@@ -108,7 +108,7 @@ local Ollama / vLLM / LM Studio (set custom base URL).
 ## Layout
 
 ```
-src/spark_libre/
+src/open_spark/
   main.py           FastAPI app + lifespan (boot OBS client, LLM)
   config.py         Settings (env + JSON), path resolution per OS
   secrets_store.py  keyring wrapper

@@ -536,7 +536,7 @@ def _validate_layout(data: dict, *, default_canvas: tuple[int, int]) -> SceneLay
     mismatches get coerced. Raises :class:`ValueError` on hard failures
     (no sources, missing required strings).
     """
-    scene_name = str(data.get("scene_name") or "Spark Libre Scene").strip() or "Spark Libre Scene"
+    scene_name = str(data.get("scene_name") or "Open Spark Scene").strip() or "Open Spark Scene"
     canvas_raw = data.get("canvas") or {}
     cw = int(canvas_raw.get("width") or default_canvas[0])
     ch = int(canvas_raw.get("height") or default_canvas[1])

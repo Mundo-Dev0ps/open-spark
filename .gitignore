@@ -16,11 +16,11 @@ env/
 .coverage
 htmlcov/
 
-# Spark Libre runtime
+# Open Spark runtime
 config.json
 overlays_data/
 *.log
-spark-libre.sock
+open-spark.sock
 
 # Docker compose dev state
 .data/

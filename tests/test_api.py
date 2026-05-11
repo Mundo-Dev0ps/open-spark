@@ -62,7 +62,7 @@ def test_settings_roundtrip(client):
 
 def test_settings_rejects_non_loopback():
     """Settings must refuse to bind to a non-loopback host."""
-    from spark_libre.config import Settings
+    from open_spark.config import Settings
 
     s = Settings(host="0.0.0.0", port=8765)
     import pytest

@@ -29,7 +29,7 @@
       $("base-url").value = s.llm_base_url || "";
       $("obs-host").value = s.obs_host || "127.0.0.1";
       $("obs-port").value = s.obs_port || 4455;
-      $("obs-scene").value = s.obs_scene_name || "Spark Libre";
+      $("obs-scene").value = s.obs_scene_name || "Open Spark";
       $("providers-with-key").textContent =
         "Providers with key stored: " +
         (s.providers_with_key.length ? s.providers_with_key.join(", ") : "none");
@@ -89,7 +89,7 @@
           obs_scene_name: scene,
         }),
       });
-      setStatus("saved (restart Spark Libre to reconnect OBS)", "ok");
+      setStatus("saved (restart Open Spark to reconnect OBS)", "ok");
     } catch (e) {
       setStatus("error: " + e.message, "err");
     }

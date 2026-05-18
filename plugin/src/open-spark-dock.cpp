@@ -25,8 +25,10 @@
 #include <QPlainTextEdit>
 #include <QPushButton>
 #include <QScrollArea>
+#include <QScrollBar>
 #include <QSpinBox>
 #include <QTabWidget>
+#include <QTextBrowser>
 #include <QTimer>
 #include <QUrl>
 #include <QVBoxLayout>
@@ -242,6 +244,7 @@ OpenSparkDock::OpenSparkDock(QWidget *parent)
 
     tabs_ = new QTabWidget(this);
     tabs_->setDocumentMode(true);
+    tabs_->addTab(buildAgentTab(), QStringLiteral("Agent"));
     tabs_->addTab(buildInputTab(), QStringLiteral("Input"));
     tabs_->addTab(buildSettingsTab(), QStringLiteral("Settings"));
     outer->addWidget(tabs_, 1);
@@ -289,6 +292,48 @@ OpenSparkDock::~OpenSparkDock() = default;
 // --------------------------------------------------------------------------
 // UI construction — Input tab
 // --------------------------------------------------------------------------
+
+QWidget *OpenSparkDock::buildAgentTab()
+{
+    auto *w = new QWidget(this);
+    auto *v = new QVBoxLayout(w);
+    v->setContentsMargins(6, 6, 6, 6);
+    v->setSpacing(6);
+
+    agentView_ = new QTextBrowser(w);
+    agentView_->setOpenExternalLinks(true);
+    agentView_->setStyleSheet(
+        "background:#1c1f26; border:1px solid #2a2e38; border-radius:4px; "
+        "font-size:12px;");
+    v->addWidget(agentView_, 1);
+
+    agentInput_ = new QPlainTextEdit(w);
+    agentInput_->setPlaceholderText(QStringLiteral(
+        "Tell the agent what to do — e.g. \"add my webcam bottom-right "
+        "with a chroma key and a neon frame, then a chat box on the left\""));
+    agentInput_->setMaximumHeight(70);
+    v->addWidget(agentInput_);
+
+    auto *row = new QHBoxLayout();
+    agentDryRun_ = new QCheckBox(QStringLiteral("Dry-run (confirm destructive)"), w);
+    agentDryRun_->setChecked(true);
+    agentSendBtn_ = new QPushButton(QStringLiteral("Send"), w);
+    agentSendBtn_->setProperty("primary", true);
+    row->addWidget(agentDryRun_);
+    row->addStretch(1);
+    row->addWidget(agentSendBtn_);
+    v->addLayout(row);
+
+    agentView_->setHtml(
+        "<div style='color:#8a8f9c'>Open Spark agent. It can build "
+        "overlays, whole scenes, add your camera, set transforms and "
+        "apply filters (chroma key, color, sharpen, LUT, borders). "
+        "Ask in plain language.</div>");
+
+    QObject::connect(agentSendBtn_, &QPushButton::clicked, this,
+                     &OpenSparkDock::doAgentSend);
+    return w;
+}
 
 QWidget *OpenSparkDock::buildInputTab()
 {
@@ -1041,6 +1086,105 @@ void OpenSparkDock::doInjectLast()
 void OpenSparkDock::onOpenInBrowser()
 {
     QDesktopServices::openUrl(QUrl(url_));
+}
+
+// --------------------------------------------------------------------------
+// Agent chat
+// --------------------------------------------------------------------------
+
+void OpenSparkDock::agentAppend(const QString &role, const QString &html)
+{
+    if (!agentView_) return;
+    QString color = "#e6e8ee";
+    QString label = role;
+    if (role == "user") { color = "#39ff8a"; label = "you"; }
+    else if (role == "assistant") { color = "#9be8ff"; label = "agent"; }
+    else if (role == "tool") { color = "#ffb14a"; label = "tool"; }
+    else if (role == "error") { color = "#ff5470"; label = "error"; }
+    agentView_->append(
+        QStringLiteral(
+            "<div style='margin:6px 0'>"
+            "<span style='color:%1;font-weight:700;text-transform:uppercase;"
+            "font-size:10px;letter-spacing:0.5px'>%2</span><br>"
+            "<span style='color:#e6e8ee'>%3</span></div>")
+            .arg(color, label, html));
+    agentView_->verticalScrollBar()->setValue(
+        agentView_->verticalScrollBar()->maximum());
+}
+
+void OpenSparkDock::doAgentSend()
+{
+    const QString text = agentInput_->toPlainText().trimmed();
+    if (text.isEmpty()) return;
+
+    agentHistory_ << text;  // store raw user content; role inferred by index
+    agentAppend(QStringLiteral("user"), text.toHtmlEscaped());
+    agentInput_->clear();
+    agentSendBtn_->setEnabled(false);
+    beginThinking(QStringLiteral("Agent thinking…"));
+
+    // Rebuild the full transcript: even indices = user, odd = assistant.
+    QJsonArray msgs;
+    for (int i = 0; i < agentHistory_.size(); ++i) {
+        QJsonObject m;
+        m.insert(QStringLiteral("role"),
+                 (i % 2 == 0) ? QStringLiteral("user")
+                              : QStringLiteral("assistant"));
+        m.insert(QStringLiteral("content"), agentHistory_.at(i));
+        msgs.append(m);
+    }
+    QJsonObject body;
+    body.insert(QStringLiteral("messages"), msgs);
+    body.insert(QStringLiteral("dry_run"), agentDryRun_->isChecked());
+
+    http_->postJson(
+        QStringLiteral("/api/agent/chat"),
+        QJsonDocument(body).toJson(QJsonDocument::Compact),
+        [this](const openspark::HttpResult &r) {
+            endThinking();
+            agentSendBtn_->setEnabled(true);
+            if (!r.ok) {
+                agentAppend(QStringLiteral("error"),
+                            QStringLiteral("HTTP %1: %2")
+                                .arg(r.status)
+                                .arg(QString::fromUtf8(r.body).toHtmlEscaped()));
+                return;
+            }
+            const auto o = QJsonDocument::fromJson(r.body).object();
+
+            // Tool-call cards.
+            for (const auto &sv : o.value("steps").toArray()) {
+                const auto s = sv.toObject();
+                const QString tool = s.value("tool").toString();
+                const bool exec = s.value("executed").toBool();
+                const QString badge = exec ? QStringLiteral("✓ ran")
+                                           : QStringLiteral("⏸ skipped");
+                const QString args = QString::fromUtf8(
+                    QJsonDocument(s.value("args").toObject())
+                        .toJson(QJsonDocument::Compact));
+                agentAppend(
+                    QStringLiteral("tool"),
+                    QStringLiteral("<code>%1</code> %2 "
+                                   "<span style='color:#8a8f9c'>%3</span>")
+                        .arg(tool.toHtmlEscaped(), badge,
+                             args.toHtmlEscaped()));
+            }
+
+            const auto pending = o.value("pending_confirmation").toArray();
+            if (!pending.isEmpty()) {
+                agentAppend(
+                    QStringLiteral("tool"),
+                    QStringLiteral("%1 destructive action(s) need "
+                                   "confirmation — uncheck Dry-run and "
+                                   "resend to apply.")
+                        .arg(pending.size()));
+            }
+
+            const QString final = o.value("final_message").toString();
+            agentHistory_ << final;  // odd index → assistant on next send
+            agentAppend(QStringLiteral("assistant"),
+                        final.toHtmlEscaped());
+        });
 }
 
 // --------------------------------------------------------------------------

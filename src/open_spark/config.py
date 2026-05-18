@@ -68,7 +68,7 @@ class Settings(BaseSettings):
 
     model_config = SettingsConfigDict(
         env_file=".env",
-        env_prefix="SPARK_",
+        env_prefix="OPENSPARK_",
         env_file_encoding="utf-8",
         extra="ignore",
     )

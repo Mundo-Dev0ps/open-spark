@@ -22,6 +22,7 @@ class QPushButton;
 class QSpinBox;
 class QCheckBox;
 class QPlainTextEdit;
+class QTextBrowser;
 class QTimer;
 class QTabWidget;
 
@@ -51,10 +52,15 @@ private slots:
     void doInjectLast();
     void onOpenInBrowser();
 
+private slots:
+    void doAgentSend();
+
 private:
     QWidget *buildInputTab();
+    QWidget *buildAgentTab();
     QWidget *buildSettingsTab();
     void wire();
+    void agentAppend(const QString &role, const QString &html);
     void setStatusLine(const QString &text, bool ok);
     void appendLog(const QString &text);
 
@@ -86,6 +92,13 @@ private:
     QComboBox *settingsKeyProviderCombo_ = nullptr;
     QLineEdit *settingsKeyValueEdit_ = nullptr;
     QPushButton *settingsKeySaveBtn_ = nullptr;
+
+    // Agent chat tab.
+    QTextBrowser *agentView_ = nullptr;
+    QPlainTextEdit *agentInput_ = nullptr;
+    QPushButton *agentSendBtn_ = nullptr;
+    QCheckBox *agentDryRun_ = nullptr;
+    QStringList agentHistory_;   // alternating role/content JSON-ready
 
     // "Generate overlay" group.
     QPlainTextEdit *promptEdit_ = nullptr;

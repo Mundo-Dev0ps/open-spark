@@ -62,6 +62,35 @@ class StatusResponse(BaseModel):
     version: str
 
 
+# --- Agent ------------------------------------------------------------------
+
+class AgentMessage(BaseModel):
+    role: str  # "user" | "assistant"
+    content: str
+
+
+class AgentChatRequest(BaseModel):
+    messages: list[AgentMessage] = Field(min_length=1)
+    model: str | None = None
+    dry_run: bool = False
+    max_steps: int = Field(default=8, ge=1, le=20)
+
+
+class AgentToolCall(BaseModel):
+    tool: str
+    args: dict
+    result: dict
+    executed: bool
+
+
+class AgentChatResponse(BaseModel):
+    final_message: str
+    steps: list[AgentToolCall]
+    pending_confirmation: list[dict]
+    model: str
+    usage: dict
+
+
 # --- Scene templates ---------------------------------------------------------
 
 class SceneTransform(BaseModel):

@@ -9,9 +9,12 @@ from typing import TYPE_CHECKING
 from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import FileResponse
 
-from .. import __version__, llm, secrets_store
+from .. import __version__, agent, llm, secrets_store
 from ..config import USER_CONFIG_PATH
 from .schemas import (
+    AgentChatRequest,
+    AgentChatResponse,
+    AgentToolCall,
     GenerateRequest,
     GenerateResponse,
     InjectRequest,
@@ -383,6 +386,70 @@ async def refine_overlay(
         title=updated.title,
         obs_action=obs_action,
     )
+
+
+@router.post("/api/agent/chat", response_model=AgentChatResponse)
+async def agent_chat(
+    request: Request, payload: AgentChatRequest
+) -> AgentChatResponse:
+    """Conversational agent: chat in, OBS actions out.
+
+    The LLM is given the full tool registry (overlays, scenes, camera,
+    transforms, filters, …) and drives a tool-calling loop against the
+    live OBS session. ``dry_run`` makes destructive tools report instead
+    of execute so the UI can confirm first.
+    """
+    state = _state(request)
+    user_cfg = _user_config()
+    model = (
+        payload.model
+        or user_cfg.get("default_model")
+        or state.settings.default_model
+    )
+    base_url = user_cfg.get("llm_base_url") or state.settings.llm_base_url or None
+
+    try:
+        res = await agent.run_agent(
+            user_messages=[m.model_dump() for m in payload.messages],
+            state=state,
+            model=model,
+            base_url=base_url,
+            max_steps=payload.max_steps,
+            dry_run=payload.dry_run,
+        )
+    except Exception as e:
+        log.exception("agent loop failed")
+        raise HTTPException(status_code=502, detail=f"agent error: {e}") from e
+
+    return AgentChatResponse(
+        final_message=res.final_message,
+        steps=[
+            AgentToolCall(
+                tool=s.tool, args=s.args, result=s.result, executed=s.executed
+            )
+            for s in res.steps
+        ],
+        pending_confirmation=res.pending_confirmation,
+        model=res.model,
+        usage=res.usage,
+    )
+
+
+@router.get("/api/agent/tools")
+async def agent_tools() -> dict:
+    """Expose the tool catalogue (names + descriptions) for the UI."""
+    from .. import tools as _tools
+
+    return {
+        "tools": [
+            {
+                "name": t.name,
+                "description": t.description,
+                "destructive": t.destructive,
+            }
+            for t in _tools._REGISTRY.values()
+        ]
+    }
 
 
 @router.get("/api/styles")

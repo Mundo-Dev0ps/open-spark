@@ -43,6 +43,9 @@ class OBSClientProtocol(Protocol):
         sources: list[dict],
         replace: bool = False,
     ) -> dict: ...
+    async def raw_request(
+        self, request_type: str, data: dict | None = None
+    ) -> dict: ...
 
 
 @dataclass
@@ -143,6 +146,64 @@ class MockOBSClient:
         log.info("[mock-obs] upsert_scene_layout scene=%s sources=%d replace=%s",
                  scene_name, len(applied), replace)
         return {"scene": scene_name, "sources": applied, "mock": True}
+
+    async def raw_request(
+        self, request_type: str, data: dict | None = None
+    ) -> dict:
+        """Simulate the obs-websocket requests the agent layer uses.
+
+        Only the ones the agent tools actually issue are modelled; the
+        rest return an ``ok`` stub so tests stay deterministic without a
+        real OBS.
+        """
+        data = data or {}
+        rt = request_type
+        if rt == "GetSceneList":
+            return {
+                "scenes": [{"sceneName": s} for s in self.scenes],
+                "currentProgramSceneName": self.scenes[-1] if self.scenes else "",
+            }
+        if rt == "GetInputKindList":
+            return {"inputKinds": [
+                "browser_source", "image_source", "color_source_v3",
+                "text_ft2_source_v2", "v4l2_input", "ffmpeg_source",
+            ]}
+        if rt == "GetSceneItemList":
+            scene = data.get("sceneName", "")
+            items = self.scene_items.get(scene, [])
+            return {"sceneItems": [
+                {"sceneItemId": i + 1, "sourceName": n}
+                for i, n in enumerate(items)
+            ]}
+        if rt == "GetSourceFilterList":
+            return {"filters": []}
+        if rt == "CreateInput":
+            scene = data.get("sceneName", "Open Spark")
+            name = data.get("inputName", "input")
+            if scene not in self.scenes:
+                self.scenes.append(scene)
+            self.scene_items.setdefault(scene, [])
+            if name not in self.scene_items[scene]:
+                self.scene_items[scene].append(name)
+            self.sources[name] = _MockSource(
+                name=name, url="", width=0, height=0, scene=scene
+            )
+            return {"inputUuid": f"uuid-{name}",
+                    "sceneItemId": len(self.scene_items[scene])}
+        if rt == "SetCurrentProgramScene":
+            sn = data.get("sceneName")
+            if sn and sn in self.scenes:
+                # Move to end → current_scene_name() reports it.
+                self.scenes.remove(sn)
+                self.scenes.append(sn)
+            return {}
+        if rt in (
+            "CreateSourceFilter", "SetSourceFilterSettings",
+            "RemoveSourceFilter", "SetSceneItemTransform",
+            "SetSceneItemEnabled", "SetInputSettings", "CreateScene",
+        ):
+            return {"ok": True, "mock": True}
+        return {"ok": True, "mock": True, "unhandled": rt}
 
 
 class OBSClient:
@@ -261,6 +322,43 @@ class OBSClient:
             if v:
                 return str(v)
         return None
+
+    async def raw_request(
+        self, request_type: str, data: dict | None = None
+    ) -> dict:
+        """Generic obs-websocket passthrough used by the agent tools.
+
+        We send the request with obsws-python's low-level ``send`` and
+        normalise the response to a plain dict so the agent layer never
+        has to know about obsws-python's attribute objects. Reconnects
+        transparently on a dead socket like every other call here.
+        """
+        if self._req is None:
+            await self.connect()
+
+        def _call():
+            assert self._req is not None
+            # obsws-python ReqClient.send(type, data, raw=True) returns
+            # the response dict verbatim.
+            try:
+                return self._req.send(request_type, data or {}, raw=True)
+            except TypeError:
+                # Older obsws-python without the `raw` kwarg.
+                resp = self._req.send(request_type, data or {})
+                if isinstance(resp, dict):
+                    return resp
+                return {
+                    k: v for k, v in vars(resp).items()
+                    if not k.startswith("_")
+                }
+
+        result = await self._retry(_call)
+        if isinstance(result, dict):
+            return result
+        # Defensive: coerce attribute object → dict.
+        return {
+            k: v for k, v in vars(result).items() if not k.startswith("_")
+        }
 
     async def upsert_browser_source(
         self,

@@ -41,6 +41,8 @@ class SettingsPayload(BaseModel):
     """Editable runtime settings. Secrets handled separately."""
 
     default_model: str | None = None
+    agent_model: str | None = None
+    overlay_quality_passes: int | None = None
     llm_base_url: str | None = None
     obs_host: str | None = None
     obs_port: int | None = None
@@ -87,8 +89,20 @@ class AgentChatResponse(BaseModel):
     final_message: str
     steps: list[AgentToolCall]
     pending_confirmation: list[dict]
+    created_inputs: list[str] = []
     model: str
     usage: dict
+
+
+class AgentUndoRequest(BaseModel):
+    # If empty, the backend undoes the last persisted session's
+    # created inputs.
+    inputs: list[str] = []
+
+
+class AgentUndoResponse(BaseModel):
+    removed: list[str]
+    errors: list[str] = []
 
 
 # --- Scene templates ---------------------------------------------------------

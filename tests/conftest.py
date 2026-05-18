@@ -49,7 +49,8 @@ def fake_llm(monkeypatch: pytest.MonkeyPatch):
         "<body><h1>stub overlay</h1></body></html>"
     )
 
-    async def _fake(prompt: str, *, model: str, base_url=None, style=None):
+    async def _fake(prompt: str, *, model: str, base_url=None, style=None,
+                     quality_passes: int = 1):
         return llm_mod.LLMResult(
             html=canned_html, model=model, usage={"prompt_tokens": len(prompt)}
         )

@@ -287,6 +287,7 @@ OpenSparkDock::OpenSparkDock(QWidget *parent)
     // Input tab which no longer exists.)
     refreshStatus();
     refreshSettings();
+    agentLoadSession();
 }
 
 OpenSparkDock::~OpenSparkDock() = default;
@@ -319,12 +320,20 @@ QWidget *OpenSparkDock::buildAgentTab()
     auto *row = new QHBoxLayout();
     agentDryRun_ = new QCheckBox(QStringLiteral("Dry-run (confirm destructive)"), w);
     agentDryRun_->setChecked(true);
+    agentUndoBtn_ = new QPushButton(QStringLiteral("Undo last"), w);
+    agentUndoBtn_->setToolTip(QStringLiteral(
+        "Remove the inputs the agent added in its last turn"));
+    agentUndoBtn_->setStyleSheet("color:#ff5470; border-color:#ff5470;");
+    agentUndoBtn_->setEnabled(false);
     agentSendBtn_ = new QPushButton(QStringLiteral("Send"), w);
     agentSendBtn_->setProperty("primary", true);
     row->addWidget(agentDryRun_);
     row->addStretch(1);
+    row->addWidget(agentUndoBtn_);
     row->addWidget(agentSendBtn_);
     v->addLayout(row);
+    QObject::connect(agentUndoBtn_, &QPushButton::clicked, this,
+                     &OpenSparkDock::agentDoUndo);
 
     agentView_->setHtml(
         "<div style='color:#8a8f9c'>Open Spark agent. It can build "
@@ -656,6 +665,21 @@ QWidget *OpenSparkDock::buildSettingsTab()
     settingsModelEdit_->setPlaceholderText(
         QStringLiteral("e.g. nvidia_nim/meta/llama-3.3-70b-instruct"));
     llmForm->addRow(QStringLiteral("Default model:"), settingsModelEdit_);
+
+    settingsAgentModelEdit_ = new QLineEdit(llmBox);
+    settingsAgentModelEdit_->setPlaceholderText(QStringLiteral(
+        "(optional) strong tool-calling model for the Agent — "
+        "blank = Default model"));
+    llmForm->addRow(QStringLiteral("Agent model:"), settingsAgentModelEdit_);
+
+    settingsQualitySpin_ = new QSpinBox(llmBox);
+    settingsQualitySpin_->setRange(1, 3);
+    settingsQualitySpin_->setToolTip(QStringLiteral(
+        "1 = fast single pass. 2 = generate + art-director critique "
+        "refine (slower, more premium)."));
+    llmForm->addRow(QStringLiteral("Overlay quality passes:"),
+                    settingsQualitySpin_);
+
     settingsLlmBaseEdit_ = new QLineEdit(llmBox);
     settingsLlmBaseEdit_->setPlaceholderText(
         QStringLiteral("(optional) http://127.0.0.1:11434  for Ollama"));
@@ -812,6 +836,10 @@ void OpenSparkDock::refreshSettings()
             }
             const auto o = QJsonDocument::fromJson(r.body).object();
             settingsModelEdit_->setText(o.value("default_model").toString());
+            settingsAgentModelEdit_->setText(
+                o.value("agent_model").toString());
+            settingsQualitySpin_->setValue(
+                o.value("overlay_quality_passes").toInt(1));
             settingsLlmBaseEdit_->setText(o.value("llm_base_url").toString());
             settingsObsHostEdit_->setText(o.value("obs_host").toString());
             settingsObsPortSpin_->setValue(o.value("obs_port").toInt(4455));
@@ -830,6 +858,10 @@ void OpenSparkDock::saveSettings()
 {
     QJsonObject obj;
     obj.insert(QStringLiteral("default_model"), settingsModelEdit_->text());
+    obj.insert(QStringLiteral("agent_model"),
+               settingsAgentModelEdit_->text());
+    obj.insert(QStringLiteral("overlay_quality_passes"),
+               settingsQualitySpin_->value());
     obj.insert(QStringLiteral("llm_base_url"), settingsLlmBaseEdit_->text());
     obj.insert(QStringLiteral("obs_host"), settingsObsHostEdit_->text());
     obj.insert(QStringLiteral("obs_port"), settingsObsPortSpin_->value());
@@ -1124,53 +1156,133 @@ void OpenSparkDock::doAgentSend()
     body.insert(QStringLiteral("messages"), msgs);
     body.insert(QStringLiteral("dry_run"), agentDryRun_->isChecked());
 
-    http_->postJson(
-        QStringLiteral("/api/agent/chat"),
+    // Stream: tool cards appear live as each step finishes instead of
+    // after the whole loop.
+    http_->postSse(
+        QStringLiteral("/api/agent/chat/stream"),
         QJsonDocument(body).toJson(QJsonDocument::Compact),
-        [this](const openspark::HttpResult &r) {
-            endThinking();
-            agentSendBtn_->setEnabled(true);
-            if (!r.ok) {
-                agentAppend(QStringLiteral("error"),
-                            QStringLiteral("HTTP %1: %2")
-                                .arg(r.status)
-                                .arg(QString::fromUtf8(r.body).toHtmlEscaped()));
-                return;
-            }
-            const auto o = QJsonDocument::fromJson(r.body).object();
-
-            // Tool-call cards.
-            for (const auto &sv : o.value("steps").toArray()) {
-                const auto s = sv.toObject();
-                const QString tool = s.value("tool").toString();
-                const bool exec = s.value("executed").toBool();
+        // onEvent(name, dataJson)
+        [this](const QString &ev, const QByteArray &data) {
+            const auto o = QJsonDocument::fromJson(data).object();
+            if (ev == QStringLiteral("step")) {
+                const QString tool = o.value("tool").toString();
+                const bool exec = o.value("executed").toBool();
                 const QString badge = exec ? QStringLiteral("✓ ran")
                                            : QStringLiteral("⏸ skipped");
                 const QString args = QString::fromUtf8(
-                    QJsonDocument(s.value("args").toObject())
+                    QJsonDocument(o.value("args").toObject())
                         .toJson(QJsonDocument::Compact));
+                // If a tool produced an overlay URL, surface it as a
+                // clickable link (preview in browser).
+                QString extra;
+                const auto res = o.value("result").toObject();
+                const QString url = res.value("url").toString();
+                if (!url.isEmpty()) {
+                    extra = QStringLiteral(
+                        " <a href='%1' style='color:#39ff8a'>preview</a>")
+                        .arg(url);
+                }
                 agentAppend(
                     QStringLiteral("tool"),
                     QStringLiteral("<code>%1</code> %2 "
-                                   "<span style='color:#8a8f9c'>%3</span>")
+                                   "<span style='color:#8a8f9c'>%3</span>%4")
                         .arg(tool.toHtmlEscaped(), badge,
-                             args.toHtmlEscaped()));
-            }
+                             args.toHtmlEscaped(), extra));
+            } else if (ev == QStringLiteral("final")) {
+                const auto pending =
+                    o.value("pending_confirmation").toArray();
+                if (!pending.isEmpty()) {
+                    agentAppend(
+                        QStringLiteral("tool"),
+                        QStringLiteral("%1 destructive action(s) need "
+                                       "confirmation — uncheck Dry-run "
+                                       "and resend to apply.")
+                            .arg(pending.size()));
+                }
+                agentLastCreatedInputs_.clear();
+                for (const auto &iv : o.value("created_inputs").toArray()) {
+                    agentLastCreatedInputs_ << iv.toString();
+                }
+                agentUndoBtn_->setEnabled(!agentLastCreatedInputs_.isEmpty());
 
-            const auto pending = o.value("pending_confirmation").toArray();
-            if (!pending.isEmpty()) {
-                agentAppend(
-                    QStringLiteral("tool"),
-                    QStringLiteral("%1 destructive action(s) need "
-                                   "confirmation — uncheck Dry-run and "
-                                   "resend to apply.")
-                        .arg(pending.size()));
+                const QString fin = o.value("final_message").toString();
+                agentHistory_ << fin;  // odd index = assistant next send
+                agentAppend(QStringLiteral("assistant"),
+                            fin.toHtmlEscaped());
+            } else if (ev == QStringLiteral("error")) {
+                agentAppend(QStringLiteral("error"),
+                            o.value("error").toString().toHtmlEscaped());
             }
+        },
+        // onDone(error)
+        [this](const QString &err) {
+            endThinking();
+            agentSendBtn_->setEnabled(true);
+            if (!err.isEmpty()) {
+                agentAppend(QStringLiteral("error"), err.toHtmlEscaped());
+            }
+        });
+}
 
-            const QString final = o.value("final_message").toString();
-            agentHistory_ << final;  // odd index → assistant on next send
-            agentAppend(QStringLiteral("assistant"),
-                        final.toHtmlEscaped());
+void OpenSparkDock::agentLoadSession()
+{
+    http_->getJson(
+        QStringLiteral("/api/agent/session"),
+        [this](const openspark::HttpResult &r) {
+            if (!r.ok) return;
+            const auto o = QJsonDocument::fromJson(r.body).object();
+            const auto msgs = o.value("messages").toArray();
+            if (msgs.isEmpty()) return;
+            agentHistory_.clear();
+            for (const auto &mv : msgs) {
+                const auto m = mv.toObject();
+                const QString role = m.value("role").toString();
+                const QString content = m.value("content").toString();
+                if (content.isEmpty()) continue;
+                agentHistory_ << content;
+                agentAppend(role == QStringLiteral("user")
+                                ? QStringLiteral("user")
+                                : QStringLiteral("assistant"),
+                            content.toHtmlEscaped());
+            }
+            agentLastCreatedInputs_.clear();
+            for (const auto &iv : o.value("created_inputs").toArray()) {
+                agentLastCreatedInputs_ << iv.toString();
+            }
+            agentUndoBtn_->setEnabled(!agentLastCreatedInputs_.isEmpty());
+            agentAppend(QStringLiteral("tool"),
+                        QStringLiteral("— resumed previous session —"));
+        });
+}
+
+void OpenSparkDock::agentDoUndo()
+{
+    if (agentLastCreatedInputs_.isEmpty()) return;
+    QJsonArray arr;
+    for (const auto &n : agentLastCreatedInputs_) arr.append(n);
+    QJsonObject body;
+    body.insert(QStringLiteral("inputs"), arr);
+    agentUndoBtn_->setEnabled(false);
+    beginThinking(QStringLiteral("Undoing…"));
+    http_->postJson(
+        QStringLiteral("/api/agent/undo"),
+        QJsonDocument(body).toJson(QJsonDocument::Compact),
+        [this](const openspark::HttpResult &r) {
+            endThinking();
+            if (r.ok) {
+                const auto o = QJsonDocument::fromJson(r.body).object();
+                const int n = o.value("removed").toArray().size();
+                agentAppend(QStringLiteral("tool"),
+                            QStringLiteral("Undid — removed %1 input(s)")
+                                .arg(n));
+                agentLastCreatedInputs_.clear();
+            } else {
+                agentAppend(QStringLiteral("error"),
+                            QStringLiteral("Undo failed: %1")
+                                .arg(QString::fromUtf8(r.body)
+                                         .toHtmlEscaped()));
+                agentUndoBtn_->setEnabled(true);
+            }
         });
 }
 

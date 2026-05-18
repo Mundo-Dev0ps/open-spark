@@ -370,14 +370,44 @@ def _ensure_meta_charset(html: str) -> str:
     return "<head>" + _META_TAG + "</head>" + html
 
 
+SYSTEM_PROMPT_CRITIQUE = """\
+You are a senior motion-graphics art director reviewing an OBS overlay.
+Given the brief and the candidate HTML, rewrite it to hit a premium
+bar. Concretely improve at least: layered shadows/glows (no flat
+fills), typographic hierarchy (weight + tracking + a text-stroke or
+gradient on the headline), premium easing on every animation, and
+ornamental detail around the primary element. Keep the same intent and
+the same self-contained / transparent-bg / charset constraints.
+
+Return EXACTLY one HTML document, no prose, no fences.
+"""
+
+
+def _coerce_html(raw: str) -> str:
+    html = _strip_code_fence(raw)
+    if "<!doctype html" not in html.lower() and "<!DOCTYPE html" not in html:
+        html = (
+            "<!doctype html><html><head><meta charset='utf-8'>"
+            "<style>html,body{background:transparent;margin:0;}</style>"
+            f"</head><body>{html}</body></html>"
+        )
+    return _ensure_meta_charset(html)
+
+
 async def generate_overlay(
     prompt: str,
     *,
     model: str,
     base_url: str | None = None,
     style: str | None = None,
+    quality_passes: int = 1,
 ) -> LLMResult:
-    """Call the configured LLM, return a sanitized HTML document."""
+    """Call the configured LLM, return a sanitized HTML document.
+
+    ``quality_passes >= 2`` runs a second art-director critique/refine
+    pass over the first draft for a noticeably more polished result at
+    the cost of a second LLM round-trip.
+    """
     import litellm
 
     _ensure_api_key_env(model)
@@ -395,26 +425,46 @@ async def generate_overlay(
     if base_url:
         kwargs["api_base"] = base_url
 
-    log.info("LLM call model=%s prompt_len=%d", model, len(prompt))
+    log.info("LLM call model=%s prompt_len=%d passes=%d",
+             model, len(prompt), quality_passes)
     resp = await litellm.acompletion(**kwargs)
-
-    raw = resp["choices"][0]["message"]["content"] or ""
-    html = _strip_code_fence(raw)
-
-    if "<!doctype html" not in html.lower() and "<!DOCTYPE html" not in html:
-        # Fall back: wrap whatever the model returned so it still renders.
-        html = (
-            "<!doctype html><html><head><meta charset='utf-8'>"
-            "<style>html,body{background:transparent;margin:0;}</style>"
-            f"</head><body>{html}</body></html>"
-        )
-    html = _ensure_meta_charset(html)
+    html = _coerce_html(resp["choices"][0]["message"]["content"] or "")
 
     usage = getattr(resp, "usage", {}) or {}
     if hasattr(usage, "model_dump"):
         usage = usage.model_dump()
+    usage = dict(usage)
 
-    return LLMResult(html=html, model=model, usage=dict(usage))
+    for _ in range(max(0, quality_passes - 1)):
+        crit_kwargs: dict = {
+            "model": model,
+            "messages": [
+                {"role": "system", "content": SYSTEM_PROMPT_CRITIQUE},
+                {"role": "user", "content": (
+                    f"Brief: {user_prompt}\n\n"
+                    f"Candidate HTML:\n```html\n{html}\n```"
+                )},
+            ],
+            "temperature": 0.6,
+        }
+        if base_url:
+            crit_kwargs["api_base"] = base_url
+        try:
+            cresp = await litellm.acompletion(**crit_kwargs)
+            html = _coerce_html(
+                cresp["choices"][0]["message"]["content"] or ""
+            )
+            cu = getattr(cresp, "usage", {}) or {}
+            if hasattr(cu, "model_dump"):
+                cu = cu.model_dump()
+            for k, v in dict(cu).items():
+                if isinstance(v, (int, float)):
+                    usage[k] = usage.get(k, 0) + v
+        except Exception as e:  # noqa: BLE001
+            log.warning("critique pass failed, keeping draft: %s", e)
+            break
+
+    return LLMResult(html=html, model=model, usage=usage)
 
 
 # --- Iterative refine -------------------------------------------------------

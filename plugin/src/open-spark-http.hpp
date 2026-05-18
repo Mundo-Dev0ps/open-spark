@@ -53,6 +53,15 @@ public:
     void del(const QString &path,
              std::function<void(const HttpResult &)> cb);
 
+    /// POST a JSON body and consume a Server-Sent-Events response.
+    /// ``onEvent(eventName, dataJson)`` fires per SSE frame as it
+    /// arrives; ``onDone(error)`` fires once the stream closes (empty
+    /// error string = clean finish).
+    void postSse(const QString &path,
+                 const QByteArray &body,
+                 std::function<void(const QString &, const QByteArray &)> onEvent,
+                 std::function<void(const QString &)> onDone);
+
 private:
     QNetworkAccessManager *nam_;
 };

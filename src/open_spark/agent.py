@@ -51,7 +51,36 @@ Efficiency & correctness:
 * Be concise in your final message — a sentence or two, in the user's
   language, summarising what you did.
 * Never invent tool names. Only call tools that exist.
+
+Error recovery:
+* If a tool result contains an "error" field, READ it. Fix the
+  arguments (e.g. wrong scene name → call list_scenes, then retry with
+  the correct one) and try again — do not just report failure to the
+  user. Only surface an error to the user if you genuinely cannot
+  recover after one corrective attempt.
 """
+
+# Tool results fed back to the model are capped so a giant list/HTML
+# payload doesn't blow the context window or token budget.
+_MAX_TOOL_RESULT_CHARS = 1500
+
+
+def _trim_result(payload: dict) -> str:
+    s = json.dumps(payload, default=str)
+    if len(s) <= _MAX_TOOL_RESULT_CHARS:
+        return s
+    extra = len(s) - _MAX_TOOL_RESULT_CHARS
+    return s[:_MAX_TOOL_RESULT_CHARS] + "… (+" + str(extra) + " chars truncated)"
+
+
+# Tool → key in its result dict that names a created OBS input, so a
+# turn's additions can be undone by RemoveInput.
+_CREATES_INPUT = {
+    "add_camera": "added",
+    "add_text_source": "added",
+    "add_color_source": "added",
+    "inject_overlay": "injected",
+}
 
 
 @dataclass
@@ -68,6 +97,7 @@ class AgentResult:
     steps: list[AgentStep] = field(default_factory=list)
     messages: list[dict] = field(default_factory=list)  # full transcript
     pending_confirmation: list[dict] = field(default_factory=list)
+    created_inputs: list[str] = field(default_factory=list)  # for undo
     model: str = ""
     usage: dict = field(default_factory=dict)
 
@@ -83,7 +113,7 @@ def _coerce_args(raw: Any) -> dict:
     return {}
 
 
-async def run_agent(
+async def stream_agent(
     *,
     user_messages: list[dict],
     state: "AppState",
@@ -91,11 +121,14 @@ async def run_agent(
     base_url: str | None = None,
     max_steps: int = 8,
     dry_run: bool = False,
-) -> AgentResult:
-    """Drive the tool-calling loop.
+):
+    """Async generator yielding agent events as they happen:
 
-    ``user_messages`` is the prior chat as a list of
-    ``{"role": "user"|"assistant", "content": str}``.
+    * ``{"type": "step", "step": {...}}``       — a tool call finished
+    * ``{"type": "final", "result": AgentResult}`` — loop done (last)
+
+    :func:`run_agent` consumes this for the non-streaming endpoint; the
+    SSE endpoint forwards each event to the client live.
     """
     import litellm
 
@@ -109,6 +142,7 @@ async def run_agent(
     ]
     specs = tools.openai_tool_specs()
     result = AgentResult(final_message="", model=model)
+    resp = None
 
     for _ in range(max_steps):
         kwargs: dict = {
@@ -122,11 +156,9 @@ async def run_agent(
             kwargs["api_base"] = base_url
 
         resp = await litellm.acompletion(**kwargs)
-        choice = resp["choices"][0]
-        msg = choice["message"]
+        msg = resp["choices"][0]["message"]
         tool_calls = msg.get("tool_calls") or []
 
-        # Record assistant turn (with any tool calls) verbatim.
         messages.append(
             {
                 "role": "assistant",
@@ -150,36 +182,71 @@ async def run_agent(
                     "skipped": True,
                     "reason": "dry_run: destructive tool needs confirmation",
                 }
+                step = AgentStep(name, args, payload, executed=False)
                 result.pending_confirmation.append(
                     {"tool": name, "args": args}
                 )
-                result.steps.append(
-                    AgentStep(name, args, payload, executed=False)
-                )
             else:
                 payload = await tools.dispatch(name, args, state)
-                result.steps.append(
-                    AgentStep(name, args, payload, executed=True)
-                )
+                step = AgentStep(name, args, payload, executed=True)
+                key = _CREATES_INPUT.get(name)
+                if key and isinstance(payload, dict):
+                    created = payload.get(key)
+                    if isinstance(created, str) and created:
+                        result.created_inputs.append(created)
+
+            result.steps.append(step)
+            yield {
+                "type": "step",
+                "step": {
+                    "tool": step.tool,
+                    "args": step.args,
+                    "result": step.result,
+                    "executed": step.executed,
+                },
+            }
 
             messages.append(
                 {
                     "role": "tool",
                     "tool_call_id": tc.get("id"),
                     "name": name,
-                    "content": json.dumps(payload, default=str),
+                    "content": _trim_result(payload),
                 }
             )
     else:
-        # step budget exhausted without a tool-free reply
         result.final_message = (
             result.final_message
             or "Reached the action limit. Tell me the next step explicitly."
         )
 
-    usage = getattr(resp, "usage", {}) or {}
+    usage = getattr(resp, "usage", {}) or {} if resp is not None else {}
     if hasattr(usage, "model_dump"):
         usage = usage.model_dump()
     result.usage = dict(usage)
     result.messages = messages
+    yield {"type": "final", "result": result}
+
+
+async def run_agent(
+    *,
+    user_messages: list[dict],
+    state: "AppState",
+    model: str,
+    base_url: str | None = None,
+    max_steps: int = 8,
+    dry_run: bool = False,
+) -> AgentResult:
+    """Non-streaming wrapper: drains :func:`stream_agent`."""
+    result = AgentResult(final_message="", model=model)
+    async for ev in stream_agent(
+        user_messages=user_messages,
+        state=state,
+        model=model,
+        base_url=base_url,
+        max_steps=max_steps,
+        dry_run=dry_run,
+    ):
+        if ev["type"] == "final":
+            result = ev["result"]
     return result

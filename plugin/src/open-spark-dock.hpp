@@ -82,6 +82,8 @@ private:
 
     // Settings tab widgets.
     QLineEdit *settingsModelEdit_ = nullptr;
+    QLineEdit *settingsAgentModelEdit_ = nullptr;
+    QSpinBox *settingsQualitySpin_ = nullptr;
     QLineEdit *settingsLlmBaseEdit_ = nullptr;
     QLineEdit *settingsObsHostEdit_ = nullptr;
     QSpinBox *settingsObsPortSpin_ = nullptr;
@@ -97,8 +99,12 @@ private:
     QTextBrowser *agentView_ = nullptr;
     QPlainTextEdit *agentInput_ = nullptr;
     QPushButton *agentSendBtn_ = nullptr;
+    QPushButton *agentUndoBtn_ = nullptr;
     QCheckBox *agentDryRun_ = nullptr;
     QStringList agentHistory_;   // alternating role/content JSON-ready
+    QStringList agentLastCreatedInputs_;  // for one-click undo
+    void agentLoadSession();
+    void agentDoUndo();
 
     // "Generate overlay" group.
     QPlainTextEdit *promptEdit_ = nullptr;

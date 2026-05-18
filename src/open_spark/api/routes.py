@@ -7,7 +7,7 @@ import logging
 from typing import TYPE_CHECKING
 
 from fastapi import APIRouter, HTTPException, Request
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, StreamingResponse
 
 from .. import __version__, agent, llm, secrets_store
 from ..config import USER_CONFIG_PATH
@@ -81,10 +81,16 @@ async def generate(request: Request, payload: GenerateRequest) -> GenerateRespon
     user_cfg = _user_config()
     model = payload.model or user_cfg.get("default_model") or state.settings.default_model
     base_url = user_cfg.get("llm_base_url") or state.settings.llm_base_url or None
+    passes = int(
+        user_cfg.get(
+            "overlay_quality_passes", state.settings.overlay_quality_passes
+        )
+    )
 
     try:
         result = await llm.generate_overlay(
-            payload.prompt, model=model, base_url=base_url, style=payload.style
+            payload.prompt, model=model, base_url=base_url,
+            style=payload.style, quality_passes=passes,
         )
     except Exception as e:
         log.exception("LLM call failed")
@@ -401,8 +407,12 @@ async def agent_chat(
     """
     state = _state(request)
     user_cfg = _user_config()
+    # Agent prefers a dedicated tool-calling model: explicit request →
+    # user agent_model → settings.agent_model → default_model chain.
     model = (
         payload.model
+        or user_cfg.get("agent_model")
+        or state.settings.agent_model
         or user_cfg.get("default_model")
         or state.settings.default_model
     )
@@ -421,6 +431,8 @@ async def agent_chat(
         log.exception("agent loop failed")
         raise HTTPException(status_code=502, detail=f"agent error: {e}") from e
 
+    _persist_agent_session(res)
+
     return AgentChatResponse(
         final_message=res.final_message,
         steps=[
@@ -430,8 +442,136 @@ async def agent_chat(
             for s in res.steps
         ],
         pending_confirmation=res.pending_confirmation,
+        created_inputs=res.created_inputs,
         model=res.model,
         usage=res.usage,
+    )
+
+
+def _agent_session_path():
+    from ..config import app_data_dir
+
+    return app_data_dir() / "agent_last_session.json"
+
+
+def _persist_agent_session(res) -> None:
+    """Save the last agent transcript + created inputs so the dock can
+    resume the conversation and offer an undo after a restart."""
+    try:
+        payload = {
+            "messages": [
+                m for m in res.messages if m.get("role") in ("user", "assistant")
+            ],
+            "created_inputs": res.created_inputs,
+            "final_message": res.final_message,
+        }
+        p = _agent_session_path()
+        p.parent.mkdir(parents=True, exist_ok=True)
+        p.write_text(json.dumps(payload, indent=2), encoding="utf-8")
+    except Exception as e:  # noqa: BLE001
+        log.warning("could not persist agent session: %s", e)
+
+
+@router.get("/api/agent/session")
+async def agent_session() -> dict:
+    """Return the last persisted agent transcript (for dock resume)."""
+    p = _agent_session_path()
+    if not p.exists():
+        return {"messages": [], "created_inputs": []}
+    try:
+        return json.loads(p.read_text(encoding="utf-8"))
+    except (json.JSONDecodeError, OSError):
+        return {"messages": [], "created_inputs": []}
+
+
+@router.post("/api/agent/undo")
+async def agent_undo(request: Request, payload: dict) -> dict:
+    """Remove inputs the agent created (whole turn undo).
+
+    ``inputs`` in the body overrides; otherwise the last persisted
+    session's created_inputs are removed via RemoveInput.
+    """
+    state = _state(request)
+    inputs = payload.get("inputs") or []
+    if not inputs:
+        sess = await agent_session()
+        inputs = sess.get("created_inputs", [])
+    if not await state.obs.is_connected():
+        raise HTTPException(status_code=503, detail="OBS not connected")
+
+    removed: list[str] = []
+    errors: list[str] = []
+    for name in inputs:
+        try:
+            await state.obs.raw_request("RemoveInput", {"inputName": name})
+            removed.append(name)
+        except Exception as e:  # noqa: BLE001
+            errors.append(f"{name}: {e}")
+    return {"removed": removed, "errors": errors}
+
+
+@router.post("/api/agent/chat/stream")
+async def agent_chat_stream(request: Request, payload: AgentChatRequest):
+    """Server-Sent Events variant of /api/agent/chat.
+
+    Emits one ``event: step`` per tool call as it completes and a final
+    ``event: final`` with the summary, so the dock can render tool
+    cards live instead of staring at a spinner for the whole loop.
+    """
+    state = _state(request)
+    user_cfg = _user_config()
+    model = (
+        payload.model
+        or user_cfg.get("agent_model")
+        or state.settings.agent_model
+        or user_cfg.get("default_model")
+        or state.settings.default_model
+    )
+    base_url = user_cfg.get("llm_base_url") or state.settings.llm_base_url or None
+
+    async def event_stream():
+        try:
+            async for ev in agent.stream_agent(
+                user_messages=[m.model_dump() for m in payload.messages],
+                state=state,
+                model=model,
+                base_url=base_url,
+                max_steps=payload.max_steps,
+                dry_run=payload.dry_run,
+            ):
+                if ev["type"] == "step":
+                    yield (
+                        "event: step\ndata: "
+                        + json.dumps(ev["step"], default=str)
+                        + "\n\n"
+                    )
+                else:
+                    res = ev["result"]
+                    _persist_agent_session(res)
+                    final = {
+                        "final_message": res.final_message,
+                        "pending_confirmation": res.pending_confirmation,
+                        "created_inputs": res.created_inputs,
+                        "model": res.model,
+                        "usage": res.usage,
+                    }
+                    yield (
+                        "event: final\ndata: "
+                        + json.dumps(final, default=str)
+                        + "\n\n"
+                    )
+        except Exception as e:  # noqa: BLE001
+            log.exception("agent stream failed")
+            yield (
+                "event: error\ndata: "
+                + json.dumps({"error": str(e)})
+                + "\n\n"
+            )
+
+    return StreamingResponse(
+        event_stream(),
+        media_type="text/event-stream",
+        headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
     )
 
 
@@ -506,6 +646,10 @@ async def get_settings(request: Request) -> dict:
     user_cfg = _user_config()
     return {
         "default_model": user_cfg.get("default_model", state.settings.default_model),
+        "agent_model": user_cfg.get("agent_model", state.settings.agent_model),
+        "overlay_quality_passes": user_cfg.get(
+            "overlay_quality_passes", state.settings.overlay_quality_passes
+        ),
         "llm_base_url": user_cfg.get("llm_base_url", state.settings.llm_base_url),
         "obs_host": user_cfg.get("obs_host", state.settings.obs_host),
         "obs_port": user_cfg.get("obs_port", state.settings.obs_port),

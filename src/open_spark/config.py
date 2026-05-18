@@ -81,7 +81,15 @@ class Settings(BaseSettings):
     mock_obs: bool = False
 
     default_model: str = "anthropic/claude-sonnet-4-6"
+    # Optional dedicated model for the agent loop. Tool-calling wants a
+    # strong model; overlay generation wants a creative one. If empty
+    # the agent falls back to default_model.
+    agent_model: str = ""
     llm_base_url: str = ""
+
+    # Overlay quality: 1 = single pass (fast). 2 = generate then a
+    # self-critique + refine pass (slower, noticeably more "premium").
+    overlay_quality_passes: int = 1
 
     log_level: str = "INFO"
 

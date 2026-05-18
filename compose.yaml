@@ -108,6 +108,11 @@ services:
       - "998"  # render
     devices:
       - /dev/dri:/dev/dri
+      # Webcams. Host has /dev/video0,1 — pass them so the agent's
+      # add_camera tool (v4l2_input) sees a real device instead of
+      # rendering black. Add/remove lines to match your hardware.
+      - /dev/video0:/dev/video0
+      - /dev/video1:/dev/video1
     environment:
       DISPLAY: ${DISPLAY:-}
       WAYLAND_DISPLAY: ${WAYLAND_DISPLAY:-}

@@ -73,7 +73,7 @@ class AgentChatRequest(BaseModel):
     messages: list[AgentMessage] = Field(min_length=1)
     model: str | None = None
     dry_run: bool = False
-    max_steps: int = Field(default=8, ge=1, le=20)
+    max_steps: int = Field(default=14, ge=1, le=24)
 
 
 class AgentToolCall(BaseModel):

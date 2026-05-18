@@ -244,8 +244,11 @@ OpenSparkDock::OpenSparkDock(QWidget *parent)
 
     tabs_ = new QTabWidget(this);
     tabs_->setDocumentMode(true);
+    // The Input tab is gone — the Agent does generate / scene / inject /
+    // list / delete via natural language + tools, so a parallel form UI
+    // was redundant. (The browser UI at /ui/ keeps the full form for
+    // power users who want exact-pixel control.)
     tabs_->addTab(buildAgentTab(), QStringLiteral("Agent"));
-    tabs_->addTab(buildInputTab(), QStringLiteral("Input"));
     tabs_->addTab(buildSettingsTab(), QStringLiteral("Settings"));
     outer->addWidget(tabs_, 1);
 
@@ -280,10 +283,9 @@ OpenSparkDock::OpenSparkDock(QWidget *parent)
                 .arg(fill));
     });
 
-    // Initial state.
+    // Initial state. (refreshStyles/refreshOverlays only fed the old
+    // Input tab which no longer exists.)
     refreshStatus();
-    refreshStyles();
-    refreshOverlays();
     refreshSettings();
 }
 
@@ -743,32 +745,17 @@ QWidget *OpenSparkDock::buildSettingsTab()
 
 void OpenSparkDock::wire()
 {
-    QObject::connect(generateBtn_, &QPushButton::clicked, this,
-                     &OpenSparkDock::doGenerate);
-    QObject::connect(injectLastBtn_, &QPushButton::clicked, this,
-                     &OpenSparkDock::doInjectLast);
-    QObject::connect(sceneGenerateBtn_, &QPushButton::clicked, this,
-                     &OpenSparkDock::doGenerateScene);
-
-    // Disable Generate buttons while their prompt is empty so the user
-    // doesn't fire a no-op LLM call against the backend.
-    auto syncGen = [this]() {
-        generateBtn_->setEnabled(!promptEdit_->toPlainText().trimmed().isEmpty());
-    };
-    auto syncScene = [this]() {
-        sceneGenerateBtn_->setEnabled(
-            !scenePromptEdit_->toPlainText().trimmed().isEmpty());
-    };
-    QObject::connect(promptEdit_, &QPlainTextEdit::textChanged, this, syncGen);
-    QObject::connect(scenePromptEdit_, &QPlainTextEdit::textChanged, this, syncScene);
-    syncGen();
-    syncScene();
-    QObject::connect(refreshOverlaysBtn_, &QPushButton::clicked, this,
-                     &OpenSparkDock::refreshOverlays);
-    QObject::connect(reloadBtn_, &QPushButton::clicked, this,
-                     &OpenSparkDock::refreshStatus);
-    QObject::connect(openBrowserBtn_, &QPushButton::clicked, this,
-                     &OpenSparkDock::onOpenInBrowser);
+    // Input-tab widgets no longer exist (Agent replaces that flow).
+    // The Settings tab's "Open in browser" button is wired below if
+    // present.
+    if (openBrowserBtn_) {
+        QObject::connect(openBrowserBtn_, &QPushButton::clicked, this,
+                         &OpenSparkDock::onOpenInBrowser);
+    }
+    if (reloadBtn_) {
+        QObject::connect(reloadBtn_, &QPushButton::clicked, this,
+                         &OpenSparkDock::refreshStatus);
+    }
     if (settingsSaveBtn_) {
         QObject::connect(settingsSaveBtn_, &QPushButton::clicked, this,
                          &OpenSparkDock::saveSettings);

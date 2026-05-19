@@ -65,6 +65,22 @@ Efficiency & correctness:
   language, summarising what you did.
 * Never invent tool names. Only call tools that exist.
 
+Confirmation & summary (read carefully):
+* DELETING is destructive. Before you call ANY delete/remove tool,
+  your reply MUST first contain a short summary, in the user's
+  language, listing the EXACT elements you are about to delete (by
+  name), e.g. "Voy a eliminar: escena «Intro», fuente «Cam»."
+* Do NOT delete until the user explicitly confirms ("confirmo",
+  "sí", "dale", "yes"). If they have not confirmed yet, present the
+  summary and STOP — do not call the delete tool. Only call it after
+  an explicit confirmation in the user's latest message.
+* When the user names targets, list exactly those — never widen.
+* For CREATING/changing elements (camera, overlay, scene, filter):
+  no confirmation needed, but your final message MUST state which
+  elements you created/changed, by name, as a short list.
+* Never bundle a delete with other actions to sneak it past the
+  user — surface deletes on their own for confirmation.
+
 Error recovery:
 * If a tool result contains an "error" field, READ it. Fix the
   arguments (e.g. wrong scene name → call list_scenes, then retry with
@@ -120,21 +136,34 @@ class AgentResult:
 # support OpenAI-style tool calling.
 _TOOL_OK_SUBSTRINGS = (
     "anthropic/claude",
-    "openai/gpt-4", "openai/gpt-5", "openai/o1", "openai/o3", "openai/o4",
-    "gemini/gemini-1.5", "gemini/gemini-2",
-    "groq/llama-3.3", "groq/llama-3.1", "groq/qwen",
-    "deepseek/deepseek-chat", "deepseek/deepseek-v3",
-    "mistral/mistral-large", "mistral/mistral-small",
+    "openai/gpt-4",
+    "openai/gpt-5",
+    "openai/o1",
+    "openai/o3",
+    "openai/o4",
+    "gemini/gemini-1.5",
+    "gemini/gemini-2",
+    "groq/llama-3.3",
+    "groq/llama-3.1",
+    "groq/qwen",
+    "deepseek/deepseek-chat",
+    "deepseek/deepseek-v3",
+    "mistral/mistral-large",
+    "mistral/mistral-small",
     "cohere/command-r",
     # NVIDIA NIM models that expose tool calling
-    "nvidia_nim/meta/llama-3.3", "nvidia_nim/meta/llama-3.1-405",
-    "nvidia_nim/meta/llama-3.1-70", "nvidia_nim/qwen/qwen2.5-72",
+    "nvidia_nim/meta/llama-3.3",
+    "nvidia_nim/meta/llama-3.1-405",
+    "nvidia_nim/meta/llama-3.1-70",
+    "nvidia_nim/qwen/qwen2.5-72",
     "nvidia_nim/qwen/qwen2.5-coder-32",
     "nvidia_nim/mistralai/mistral-large",
     "nvidia_nim/nvidia/llama-3.1-nemotron-70",
     # OpenRouter passthrough (provider/model after the openrouter/ prefix)
-    "openrouter/anthropic/claude", "openrouter/openai/gpt-4",
-    "openrouter/meta-llama/llama-3.3", "openrouter/qwen/qwen-2.5-72",
+    "openrouter/anthropic/claude",
+    "openrouter/openai/gpt-4",
+    "openrouter/meta-llama/llama-3.3",
+    "openrouter/qwen/qwen-2.5-72",
     "openrouter/qwen/qwen-2.5-coder-32",
 )
 
@@ -174,8 +203,7 @@ def tool_support(model: str) -> tuple[bool | None, str]:
             return True, f"allowlisted family ({s})"
 
     # 3. Obvious red flags — tiny / base models that don't tool-call.
-    for bad in ("ollama/", "-1b", "-1.5b", "-2b", "-3b", "-7b-base",
-                "embed", "tinyllama", "phi-2"):
+    for bad in ("ollama/", "-1b", "-1.5b", "-2b", "-3b", "-7b-base", "embed", "tinyllama", "phi-2"):
         if bad in m:
             return False, f"likely no tool calling ({bad})"
 
@@ -196,7 +224,7 @@ def _coerce_args(raw: Any) -> dict:
 async def stream_agent(
     *,
     user_messages: list[dict],
-    state: "AppState",
+    state: AppState,
     model: str,
     base_url: str | None = None,
     max_steps: int = 8,
@@ -274,8 +302,10 @@ async def stream_agent(
                 yield {
                     "type": "step",
                     "step": {
-                        "tool": step.tool, "args": step.args,
-                        "result": step.result, "executed": step.executed,
+                        "tool": step.tool,
+                        "args": step.args,
+                        "result": step.result,
+                        "executed": step.executed,
                     },
                 }
                 # Don't feed skipped tool results back — that just makes
@@ -315,19 +345,25 @@ async def stream_agent(
             # One or more destructive actions were dry-run-blocked.
             # Stop the loop and ask the user — re-querying the model
             # only makes it spam the same call until the budget dies.
-            items = ", ".join(
-                f"{p['tool']}({', '.join(f'{k}={v}' for k, v in p['args'].items())})"
+            # Build a readable per-element summary and keep the model's
+            # own preamble (it is written in the user's language).
+            lines = "\n".join(
+                f"  • {p['tool']} → " + ", ".join(f"{k}={v}" for k, v in p["args"].items())
                 for p in result.pending_confirmation
             )
-            result.final_message = (
-                f"These actions need confirmation: {items}. "
-                "Uncheck Dry-run and resend to apply them."
+            preamble = (msg.get("content") or "").strip()
+            summary = (
+                "⚠️ Confirm before I delete — nothing has been deleted "
+                "yet:\n"
+                f"{lines}\n\n"
+                'Reply "confirmo" (or turn off Dry-run) to apply, or '
+                "tell me what to change."
             )
+            result.final_message = f"{preamble}\n\n{summary}" if preamble else summary
             break
     else:
         result.final_message = (
-            result.final_message
-            or "Reached the action limit. Tell me the next step explicitly."
+            result.final_message or "Reached the action limit. Tell me the next step explicitly."
         )
 
     usage = getattr(resp, "usage", {}) or {} if resp is not None else {}
@@ -341,7 +377,7 @@ async def stream_agent(
 async def run_agent(
     *,
     user_messages: list[dict],
-    state: "AppState",
+    state: AppState,
     model: str,
     base_url: str | None = None,
     max_steps: int = 8,

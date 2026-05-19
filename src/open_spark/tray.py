@@ -25,6 +25,7 @@ Install (host, not in the container):
 from __future__ import annotations
 
 import argparse
+import contextlib
 import logging
 import os
 import sys
@@ -41,6 +42,7 @@ WINDOW_TITLE = "Open Spark"
 
 
 # --- Importable helpers (kept testable without GUI deps) -------------------
+
 
 def _wait_for_backend(url: str, *, timeout: float = 30.0, interval: float = 0.5) -> bool:
     """Poll ``GET url`` until it returns 200 or the timeout elapses.
@@ -94,6 +96,7 @@ def _make_icon_image(size: int = 64):
 
 # --- Entry point ----------------------------------------------------------
 
+
 def _parse_args(argv: list[str]) -> argparse.Namespace:
     p = argparse.ArgumentParser(prog="open-spark-tray", description=__doc__)
     p.add_argument(
@@ -126,8 +129,7 @@ def main(argv: list[str] | None = None) -> int:
     log.info("waiting for backend at %s", STATUS_URL)
     if not _wait_for_backend(STATUS_URL, timeout=args.wait_timeout):
         sys.stderr.write(
-            "Open Spark backend is not reachable. Start it first:\n"
-            "    ./start.sh up-d\n"
+            "Open Spark backend is not reachable. Start it first:\n    ./start.sh up-d\n"
         )
         return 2
 
@@ -171,17 +173,14 @@ def main(argv: list[str] | None = None) -> int:
             if icon_img is None:
                 log.warning("Pillow missing; skipping tray icon")
             else:
+
                 def _show(_icon: Any, _item: Any = None) -> None:
-                    try:
+                    with contextlib.suppress(Exception):
                         window.show()
-                    except Exception:  # noqa: BLE001
-                        pass
 
                 def _hide(_icon: Any, _item: Any = None) -> None:
-                    try:
+                    with contextlib.suppress(Exception):
                         window.hide()
-                    except Exception:  # noqa: BLE001
-                        pass
 
                 def _quit(icon: Any, _item: Any = None) -> None:
                     try:

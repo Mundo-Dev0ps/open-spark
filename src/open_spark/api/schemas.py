@@ -66,6 +66,7 @@ class StatusResponse(BaseModel):
 
 # --- Agent ------------------------------------------------------------------
 
+
 class AgentMessage(BaseModel):
     role: str  # "user" | "assistant"
     content: str
@@ -107,6 +108,7 @@ class AgentUndoResponse(BaseModel):
 
 # --- Scene templates ---------------------------------------------------------
 
+
 class SceneTransform(BaseModel):
     x: int = 0
     y: int = 0
@@ -147,6 +149,7 @@ class RefineOverlayRequest(BaseModel):
     so the OBS Browser Source can pick up the new content with a
     cache-bust refresh.
     """
+
     instruction: str = Field(min_length=1, max_length=2000)
     style: str | None = None
     model: str | None = None

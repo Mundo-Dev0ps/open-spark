@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import contextlib
 import json
 import logging
 from typing import TYPE_CHECKING
@@ -40,7 +41,7 @@ log = logging.getLogger(__name__)
 router = APIRouter()
 
 
-def _state(request: Request) -> "AppState":
+def _state(request: Request) -> AppState:
     return request.app.state.spark
 
 
@@ -99,16 +100,15 @@ async def generate(request: Request, payload: GenerateRequest) -> GenerateRespon
     user_cfg = _user_config()
     model = payload.model or user_cfg.get("default_model") or state.settings.default_model
     base_url = user_cfg.get("llm_base_url") or state.settings.llm_base_url or None
-    passes = int(
-        user_cfg.get(
-            "overlay_quality_passes", state.settings.overlay_quality_passes
-        )
-    )
+    passes = int(user_cfg.get("overlay_quality_passes", state.settings.overlay_quality_passes))
 
     try:
         result = await llm.generate_overlay(
-            payload.prompt, model=model, base_url=base_url,
-            style=payload.style, quality_passes=passes,
+            payload.prompt,
+            model=model,
+            base_url=base_url,
+            style=payload.style,
+            quality_passes=passes,
         )
     except Exception as e:
         log.exception("LLM call failed")
@@ -178,9 +178,7 @@ async def inject(request: Request, payload: InjectRequest) -> InjectResponse:
 
 
 @router.post("/api/scenes/templates", response_model=SceneTemplateResponse)
-async def scene_template(
-    request: Request, payload: SceneTemplateRequest
-) -> SceneTemplateResponse:
+async def scene_template(request: Request, payload: SceneTemplateRequest) -> SceneTemplateResponse:
     """Generate a multi-source OBS scene from one prompt.
 
     Pipeline: LLM → JSON layout → save each HTML as overlay → OBS scene
@@ -358,8 +356,7 @@ async def refine_overlay(
 
     html_path = state.overlays.html_path(overlay_id)
     if html_path is None or not html_path.exists():
-        raise HTTPException(
-            status_code=404, detail="overlay html file missing")
+        raise HTTPException(status_code=404, detail="overlay html file missing")
     existing_html = html_path.read_text(encoding="utf-8")
 
     user_cfg = _user_config()
@@ -378,9 +375,7 @@ async def refine_overlay(
         log.exception("LLM refine failed")
         raise HTTPException(status_code=502, detail=f"LLM error: {e}") from e
 
-    updated = state.overlays.update_html(
-        overlay_id, html=result.html, model=result.model
-    )
+    updated = state.overlays.update_html(overlay_id, html=result.html, model=result.model)
     if updated is None:
         raise HTTPException(status_code=404, detail="overlay vanished mid-refine")
 
@@ -413,9 +408,7 @@ async def refine_overlay(
 
 
 @router.post("/api/agent/chat", response_model=AgentChatResponse)
-async def agent_chat(
-    request: Request, payload: AgentChatRequest
-) -> AgentChatResponse:
+async def agent_chat(request: Request, payload: AgentChatRequest) -> AgentChatResponse:
     """Conversational agent: chat in, OBS actions out.
 
     The LLM is given the full tool registry (overlays, scenes, camera,
@@ -465,9 +458,7 @@ async def agent_chat(
     return AgentChatResponse(
         final_message=res.final_message,
         steps=[
-            AgentToolCall(
-                tool=s.tool, args=s.args, result=s.result, executed=s.executed
-            )
+            AgentToolCall(tool=s.tool, args=s.args, result=s.result, executed=s.executed)
             for s in res.steps
         ],
         pending_confirmation=res.pending_confirmation,
@@ -488,9 +479,7 @@ def _persist_agent_session(res) -> None:
     resume the conversation and offer an undo after a restart."""
     try:
         payload = {
-            "messages": [
-                m for m in res.messages if m.get("role") in ("user", "assistant")
-            ],
+            "messages": [m for m in res.messages if m.get("role") in ("user", "assistant")],
             "created_inputs": res.created_inputs,
             "final_message": res.final_message,
         }
@@ -518,10 +507,8 @@ async def agent_session_clear() -> dict:
     """Wipe the persisted transcript so the next chat starts fresh —
     avoids an old goal contaminating a new conversation."""
     p = _agent_session_path()
-    try:
+    with contextlib.suppress(OSError):
         p.unlink(missing_ok=True)
-    except OSError:
-        pass
     return {"cleared": True}
 
 
@@ -575,8 +562,7 @@ async def agent_chat_stream(request: Request, payload: AgentChatRequest):
         raise HTTPException(
             status_code=400,
             detail={
-                "error": f"model {model!r} does not support tool calling "
-                f"({reason}).",
+                "error": f"model {model!r} does not support tool calling ({reason}).",
                 "suggestions": agent.SUGGESTED_TOOL_MODELS,
             },
         )
@@ -592,11 +578,7 @@ async def agent_chat_stream(request: Request, payload: AgentChatRequest):
                 dry_run=payload.dry_run,
             ):
                 if ev["type"] == "step":
-                    yield (
-                        "event: step\ndata: "
-                        + json.dumps(ev["step"], default=str)
-                        + "\n\n"
-                    )
+                    yield ("event: step\ndata: " + json.dumps(ev["step"], default=str) + "\n\n")
                 else:
                     res = ev["result"]
                     _persist_agent_session(res)
@@ -607,18 +589,10 @@ async def agent_chat_stream(request: Request, payload: AgentChatRequest):
                         "model": res.model,
                         "usage": res.usage,
                     }
-                    yield (
-                        "event: final\ndata: "
-                        + json.dumps(final, default=str)
-                        + "\n\n"
-                    )
+                    yield ("event: final\ndata: " + json.dumps(final, default=str) + "\n\n")
         except Exception as e:  # noqa: BLE001
             log.exception("agent stream failed")
-            yield (
-                "event: error\ndata: "
-                + json.dumps({"error": str(e)})
-                + "\n\n"
-            )
+            yield ("event: error\ndata: " + json.dumps({"error": str(e)}) + "\n\n")
 
     return StreamingResponse(
         event_stream(),

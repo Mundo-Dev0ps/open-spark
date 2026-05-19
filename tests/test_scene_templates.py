@@ -11,7 +11,6 @@ Covers:
 
 from __future__ import annotations
 
-import asyncio
 import json
 from typing import Any
 
@@ -20,8 +19,8 @@ import pytest
 from open_spark import llm
 from open_spark.obs_client import MockOBSClient
 
-
 # --- _extract_json -----------------------------------------------------------
+
 
 def test_extract_json_pure() -> None:
     payload = {"a": 1, "b": [1, 2]}
@@ -29,12 +28,15 @@ def test_extract_json_pure() -> None:
 
 
 def test_extract_json_with_fence() -> None:
-    raw = "```json\n{\"a\": 1}\n```"
+    raw = '```json\n{"a": 1}\n```'
     assert llm._extract_json(raw) == {"a": 1}
 
 
 def test_extract_json_with_prose_around() -> None:
-    raw = "Sure, here is the JSON:\n\n{\"scene_name\": \"X\", \"sources\": []}\n\nLet me know if you want changes."
+    raw = (
+        'Sure, here is the JSON:\n\n{"scene_name": "X", "sources": []}'
+        "\n\nLet me know if you want changes."
+    )
     assert llm._extract_json(raw) == {"scene_name": "X", "sources": []}
 
 
@@ -103,9 +105,7 @@ def test_validate_layout_repairs_missing_doctype() -> None:
 
 def test_validate_layout_rejects_no_sources() -> None:
     with pytest.raises(ValueError):
-        llm._validate_layout(
-            {"scene_name": "X", "sources": []}, default_canvas=(1920, 1080)
-        )
+        llm._validate_layout({"scene_name": "X", "sources": []}, default_canvas=(1920, 1080))
 
 
 def test_validate_layout_rejects_source_without_html() -> None:
@@ -161,6 +161,7 @@ def test_validate_layout_clamps_negative_positions() -> None:
 
 
 # --- MockOBSClient.upsert_scene_layout --------------------------------------
+
 
 @pytest.mark.asyncio
 async def test_mock_upsert_scene_layout_creates_scene() -> None:
@@ -271,12 +272,11 @@ def test_scene_templates_endpoint(client, monkeypatch: pytest.MonkeyPatch) -> No
     async def fake_acompletion(**kwargs: Any) -> _FakeResp:
         # Sanity: the system prompt should be the scene one.
         msgs = kwargs["messages"]
-        assert any(
-            "OBS Studio scene layouts" in m["content"] for m in msgs
-        )
+        assert any("OBS Studio scene layouts" in m["content"] for m in msgs)
         return _FakeResp(_LLM_FAKE_REPLY)
 
     import litellm
+
     monkeypatch.setattr(litellm, "acompletion", fake_acompletion)
 
     r = client.post(
@@ -306,6 +306,7 @@ def test_scene_templates_endpoint_rejects_no_sources(
         return _FakeResp(bad_reply)
 
     import litellm
+
     monkeypatch.setattr(litellm, "acompletion", fake_acompletion)
 
     r = client.post("/api/scenes/templates", json={"prompt": "x"})
@@ -315,9 +316,12 @@ def test_scene_templates_endpoint_rejects_no_sources(
 
 # --- Overlap resolver --------------------------------------------------------
 
+
 def _src(role: str, name: str, x: int, y: int, w: int, h: int) -> llm.SceneSourceLayout:
     return llm.SceneSourceLayout(
-        role=role, name=name, html=_MIN_HTML,
+        role=role,
+        name=name,
+        html=_MIN_HTML,
         transform={"x": x, "y": y, "width": w, "height": h},
     )
 
@@ -356,6 +360,7 @@ def test_resolve_overlaps_clamps_to_canvas() -> None:
 
 # --- Style presets -----------------------------------------------------------
 
+
 def test_apply_style_known_key_prepends_preamble() -> None:
     out = llm._apply_style("hello", "anime_kawaii")
     out_l = out.lower()
@@ -383,9 +388,8 @@ def test_styles_endpoint_returns_known_keys(client) -> None:
 
 # --- Regenerate endpoint -----------------------------------------------------
 
-def test_regenerate_overlay_overwrites_html(
-    client, monkeypatch: pytest.MonkeyPatch
-) -> None:
+
+def test_regenerate_overlay_overwrites_html(client, monkeypatch: pytest.MonkeyPatch) -> None:
     # First, generate one through the existing fake_llm fixture.
     r = client.post("/api/generate", json={"prompt": "neon timer"})
     assert r.status_code == 200, r.text
@@ -429,9 +433,8 @@ def test_regenerate_overlay_404_on_missing(client) -> None:
 
 # --- Refine endpoint --------------------------------------------------------
 
-def test_refine_overlay_patches_html(
-    client, monkeypatch: pytest.MonkeyPatch
-) -> None:
+
+def test_refine_overlay_patches_html(client, monkeypatch: pytest.MonkeyPatch) -> None:
     """POST /api/overlays/{id}/refine swaps the HTML via a delta."""
     # First generate an overlay so there's something to refine.
     r = client.post("/api/generate", json={"prompt": "neon timer"})
@@ -470,17 +473,14 @@ def test_refine_overlay_patches_html(
 
 
 def test_refine_overlay_404_on_missing(client) -> None:
-    r = client.post(
-        "/api/overlays/nope/refine", json={"instruction": "x"}
-    )
+    r = client.post("/api/overlays/nope/refine", json={"instruction": "x"})
     assert r.status_code == 404
 
 
 # --- Inject defaults to active scene ----------------------------------------
 
-def test_inject_uses_current_scene_when_no_scene_provided(
-    client, overlay_store, settings
-) -> None:
+
+def test_inject_uses_current_scene_when_no_scene_provided(client, overlay_store, settings) -> None:
     """If the caller didn't specify a scene, inject lands on whatever
     the user currently has selected in OBS, NOT on the hard-coded
     "Open Spark" scene which the user probably can't see."""
@@ -493,9 +493,7 @@ def test_inject_uses_current_scene_when_no_scene_provided(
     state = client.app.state.spark
     state.obs.scenes = ["UserScene", "ProgramScene"]
 
-    r = client.post(
-        "/api/inject", json={"overlay_id": overlay_id}
-    )
+    r = client.post("/api/inject", json={"overlay_id": overlay_id})
     assert r.status_code == 200, r.text
     assert r.json()["scene"] == "ProgramScene"
 

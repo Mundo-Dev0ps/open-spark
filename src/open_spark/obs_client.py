@@ -16,6 +16,7 @@ updates the URL of the existing source. Idempotent.
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import logging
 from dataclasses import dataclass, field
 from typing import Protocol
@@ -43,9 +44,7 @@ class OBSClientProtocol(Protocol):
         sources: list[dict],
         replace: bool = False,
     ) -> dict: ...
-    async def raw_request(
-        self, request_type: str, data: dict | None = None
-    ) -> dict: ...
+    async def raw_request(self, request_type: str, data: dict | None = None) -> dict: ...
 
 
 @dataclass
@@ -143,13 +142,15 @@ class MockOBSClient:
             applied.append(
                 {"name": s["name"], "url": s["url"], "transform": t, "role": s.get("role")}
             )
-        log.info("[mock-obs] upsert_scene_layout scene=%s sources=%d replace=%s",
-                 scene_name, len(applied), replace)
+        log.info(
+            "[mock-obs] upsert_scene_layout scene=%s sources=%d replace=%s",
+            scene_name,
+            len(applied),
+            replace,
+        )
         return {"scene": scene_name, "sources": applied, "mock": True}
 
-    async def raw_request(
-        self, request_type: str, data: dict | None = None
-    ) -> dict:
+    async def raw_request(self, request_type: str, data: dict | None = None) -> dict:
         """Simulate the obs-websocket requests the agent layer uses.
 
         Only the ones the agent tools actually issue are modelled; the
@@ -164,17 +165,22 @@ class MockOBSClient:
                 "currentProgramSceneName": self.scenes[-1] if self.scenes else "",
             }
         if rt == "GetInputKindList":
-            return {"inputKinds": [
-                "browser_source", "image_source", "color_source_v3",
-                "text_ft2_source_v2", "v4l2_input", "ffmpeg_source",
-            ]}
+            return {
+                "inputKinds": [
+                    "browser_source",
+                    "image_source",
+                    "color_source_v3",
+                    "text_ft2_source_v2",
+                    "v4l2_input",
+                    "ffmpeg_source",
+                ]
+            }
         if rt == "GetSceneItemList":
             scene = data.get("sceneName", "")
             items = self.scene_items.get(scene, [])
-            return {"sceneItems": [
-                {"sceneItemId": i + 1, "sourceName": n}
-                for i, n in enumerate(items)
-            ]}
+            return {
+                "sceneItems": [{"sceneItemId": i + 1, "sourceName": n} for i, n in enumerate(items)]
+            }
         if rt == "GetSourceFilterList":
             return {"filters": []}
         if rt == "CreateInput":
@@ -185,11 +191,8 @@ class MockOBSClient:
             self.scene_items.setdefault(scene, [])
             if name not in self.scene_items[scene]:
                 self.scene_items[scene].append(name)
-            self.sources[name] = _MockSource(
-                name=name, url="", width=0, height=0, scene=scene
-            )
-            return {"inputUuid": f"uuid-{name}",
-                    "sceneItemId": len(self.scene_items[scene])}
+            self.sources[name] = _MockSource(name=name, url="", width=0, height=0, scene=scene)
+            return {"inputUuid": f"uuid-{name}", "sceneItemId": len(self.scene_items[scene])}
         if rt == "SetCurrentProgramScene":
             sn = data.get("sceneName")
             if sn and sn in self.scenes:
@@ -212,13 +215,24 @@ class MockOBSClient:
             )
             return {"imageData": png}
         if rt in (
-            "CreateSourceFilter", "SetSourceFilterSettings",
-            "RemoveSourceFilter", "SetSceneItemTransform",
-            "SetSceneItemEnabled", "SetInputSettings", "CreateScene",
-            "SetInputVolume", "SetInputMute",
-            "StartRecord", "StopRecord", "ToggleRecord",
-            "StartStream", "StopStream", "ToggleStream",
-            "StartVirtualCam", "StopVirtualCam", "ToggleVirtualCam",
+            "CreateSourceFilter",
+            "SetSourceFilterSettings",
+            "RemoveSourceFilter",
+            "SetSceneItemTransform",
+            "SetSceneItemEnabled",
+            "SetInputSettings",
+            "CreateScene",
+            "SetInputVolume",
+            "SetInputMute",
+            "StartRecord",
+            "StopRecord",
+            "ToggleRecord",
+            "StartStream",
+            "StopStream",
+            "ToggleStream",
+            "StartVirtualCam",
+            "StopVirtualCam",
+            "ToggleVirtualCam",
             "TriggerHotkeyByName",
         ):
             return {"ok": True, "mock": True}
@@ -266,10 +280,8 @@ class OBSClient:
     async def _reconnect(self) -> None:
         """Drop a stale handle and open a fresh one. Used by retry()."""
         log.info("OBS WebSocket reconnecting…")
-        try:
+        with contextlib.suppress(Exception):
             await self.disconnect()
-        except Exception:  # noqa: BLE001
-            pass
         await self.connect()
 
     async def _retry(self, fn, *args, **kwargs):
@@ -294,8 +306,7 @@ class OBSClient:
             # Some obsws errors look like generic OSError on a closed
             # socket; treat the same way.
             msg = str(e).lower()
-            if "broken pipe" in msg or "connection reset" in msg \
-                    or "not connected" in msg:
+            if "broken pipe" in msg or "connection reset" in msg or "not connected" in msg:
                 log.warning("OBS call OSError (%s); reconnecting and retrying", e)
                 await self._reconnect()
                 method_name = getattr(fn, "__name__", None)
@@ -342,9 +353,7 @@ class OBSClient:
                 return str(v)
         return None
 
-    async def raw_request(
-        self, request_type: str, data: dict | None = None
-    ) -> dict:
+    async def raw_request(self, request_type: str, data: dict | None = None) -> dict:
         """Generic obs-websocket passthrough used by the agent tools.
 
         We send the request with obsws-python's low-level ``send`` and
@@ -366,18 +375,13 @@ class OBSClient:
                 resp = self._req.send(request_type, data or {})
                 if isinstance(resp, dict):
                     return resp
-                return {
-                    k: v for k, v in vars(resp).items()
-                    if not k.startswith("_")
-                }
+                return {k: v for k, v in vars(resp).items() if not k.startswith("_")}
 
         result = await self._retry(_call)
         if isinstance(result, dict):
             return result
         # Defensive: coerce attribute object → dict.
-        return {
-            k: v for k, v in vars(result).items() if not k.startswith("_")
-        }
+        return {k: v for k, v in vars(result).items() if not k.startswith("_")}
 
     async def upsert_browser_source(
         self,
@@ -481,7 +485,11 @@ class OBSClient:
         try:
             resp = await self._retry(
                 self._req.create_input,
-                scene_name, name, "browser_source", settings, True,
+                scene_name,
+                name,
+                "browser_source",
+                settings,
+                True,
             )
             log.info("created browser_source %s on scene %s", name, scene_name)
             return getattr(resp, "scene_item_id", None)
@@ -490,17 +498,13 @@ class OBSClient:
             await self._retry(self._req.set_input_settings, name, settings, True)
             # Fetch the existing scene item id.
             try:
-                resp = await self._retry(
-                    self._req.get_scene_item_id, scene_name, name, 0
-                )
+                resp = await self._retry(self._req.get_scene_item_id, scene_name, name, 0)
                 return getattr(resp, "scene_item_id", None)
             except Exception as e2:
                 # Source exists but not on this scene: add it.
                 log.debug("get_scene_item_id failed (%s); adding to scene", e2)
                 try:
-                    resp = await self._retry(
-                        self._req.create_scene_item, scene_name, name, True
-                    )
+                    resp = await self._retry(self._req.create_scene_item, scene_name, name, True)
                     return getattr(resp, "scene_item_id", None)
                 except Exception as e3:
                     log.warning("create_scene_item also failed for %s: %s", name, e3)
@@ -525,9 +529,7 @@ class OBSClient:
             "alignment": 5,  # top-left
         }
         try:
-            await self._retry(
-                self._req.set_scene_item_transform, scene_name, scene_item_id, t
-            )
+            await self._retry(self._req.set_scene_item_transform, scene_name, scene_item_id, t)
         except Exception as e:
             log.warning("set_scene_item_transform failed for item %s: %s", scene_item_id, e)
 
@@ -554,15 +556,18 @@ class OBSClient:
             )
             if item_id is not None:
                 await self._set_transform(scene_name, item_id, t)
-            applied.append({
-                "name": name,
-                "url": url,
-                "transform": t,
-                "role": s.get("role"),
-                "scene_item_id": item_id,
-            })
-        log.info("upsert_scene_layout scene=%s sources=%d replace=%s",
-                 scene_name, len(applied), replace)
+            applied.append(
+                {
+                    "name": name,
+                    "url": url,
+                    "transform": t,
+                    "role": s.get("role"),
+                    "scene_item_id": item_id,
+                }
+            )
+        log.info(
+            "upsert_scene_layout scene=%s sources=%d replace=%s", scene_name, len(applied), replace
+        )
         return {"scene": scene_name, "sources": applied, "mock": False}
 
 

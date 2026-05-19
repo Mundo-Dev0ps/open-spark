@@ -30,6 +30,7 @@ Audit / clear via ``keyring`` CLI (host) or compose env (container):
 
 from __future__ import annotations
 
+import contextlib
 import json
 import logging
 import os
@@ -69,7 +70,12 @@ def _llm_key(provider: str) -> str:
 
 def _env_mode() -> bool:
     """True when the container/CI flag is set."""
-    return os.environ.get("OPENSPARK_USE_ENV_SECRETS", "").strip().lower() in {"1", "true", "yes", "on"}
+    return os.environ.get("OPENSPARK_USE_ENV_SECRETS", "").strip().lower() in {
+        "1",
+        "true",
+        "yes",
+        "on",
+    }
 
 
 def _env_var_for(key: str) -> str:
@@ -101,10 +107,8 @@ def _write_user_secrets(d: dict[str, str]) -> None:
     p = _user_secrets_path()
     p.parent.mkdir(parents=True, exist_ok=True)
     p.write_text(json.dumps(d, indent=2), encoding="utf-8")
-    try:
+    with contextlib.suppress(OSError):
         p.chmod(0o600)
-    except OSError:
-        pass
 
 
 def get_secret(key: str) -> str | None:
@@ -144,10 +148,8 @@ def delete_secret(key: str) -> None:
             _write_user_secrets(d)
             log.info("user_secrets.json removed key=%s", key)
         return
-    try:
+    with contextlib.suppress(KeyringError):
         keyring.delete_password(KEYRING_SERVICE, key)
-    except KeyringError:
-        pass
 
 
 def get_obs_password() -> str | None:

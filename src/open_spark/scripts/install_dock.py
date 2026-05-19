@@ -94,10 +94,12 @@ def main() -> int:
     parser = argparse.ArgumentParser(description="Install Open Spark OBS dock")
     parser.add_argument("--name", default=DEFAULT_DOCK_NAME)
     parser.add_argument("--url", default=DEFAULT_URL)
-    parser.add_argument("--config-dir", type=Path, default=None,
-                        help="OBS config dir (auto-detected if omitted)")
-    parser.add_argument("--list-candidates", action="store_true",
-                        help="print detected OBS config dirs and exit")
+    parser.add_argument(
+        "--config-dir", type=Path, default=None, help="OBS config dir (auto-detected if omitted)"
+    )
+    parser.add_argument(
+        "--list-candidates", action="store_true", help="print detected OBS config dirs and exit"
+    )
     args = parser.parse_args()
 
     if args.list_candidates:

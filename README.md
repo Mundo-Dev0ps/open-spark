@@ -1,125 +1,194 @@
 # Open Spark
 
-Generate OBS overlays from natural language. Local-first. LLM-agnostic.
+**Build and tune your OBS scene by talking to it.** Describe an overlay,
+a camera layout, a filter, or a whole scene in plain language — a local
+LLM agent calls OBS for you and makes it happen.
 
-> **Status:** early MVP. Not on PyPI yet. Linux + Windows.
+Local-first. LLM-agnostic. No telemetry. No cloud. Your API keys never
+leave your machine.
 
-## What it is
+> **Status:** early MVP. Linux (native plugin + container stack),
+> Windows / macOS plugin builds via CI. Not on PyPI yet.
 
-Backend in Python that runs on your machine. UI lives **inside OBS** as a
-Custom Browser Dock pointed at `http://127.0.0.1:8765`. You type what you
-want ("a neon countdown timer with a progress bar"), an LLM produces
-HTML+CSS+JS, the backend serves it locally, and OBS picks it up as a
-Browser Source via `obs-websocket`.
+---
 
-No telemetry. No cloud. Your API keys live in your OS keyring.
+## What it does
 
-## Architecture
+- **Conversational agent inside OBS.** A docked chat panel (native Qt
+  plugin, in OBS under *View → Docks → Open Spark*). Type
+  *"add my webcam bottom-right with a chroma key and a neon frame, then
+  a countdown timer top-center"* and it does it — camera, transforms,
+  filters, audio, recording/streaming control, scene presets, and
+  HTML overlays.
+- **Natural-language overlays.** The LLM writes HTML/CSS/JS; the backend
+  serves it locally; OBS picks it up as a Browser Source.
+- **Safe by default.** Destructive actions (deleting a scene, etc.) run
+  in *dry-run* and ask for confirmation first.
+- **Bring your own model.** Anthropic, OpenAI, Gemini, Groq, Mistral,
+  Cohere, DeepSeek, NVIDIA NIM, OpenRouter, or local Ollama / vLLM /
+  LM Studio. **Free options exist** (NVIDIA NIM free credits, OpenRouter
+  `:free` models) — no paid key required to try it.
+
+## How it fits together
 
 ```
-+---------------------------+         +-----------------------+
-|   OBS Studio              |  WS     |  Open Spark backend  |
-|   - Custom Browser Dock --|---HTTP->|  FastAPI on 127.0.0.1 |
-|   - Browser Source     <--|---------|  serves /overlays/*   |
-+---------------------------+         |  obs-websocket client |
-                                      |  LiteLLM (any model)  |
-                                      |  keyring (secrets)    |
-                                      +-----------------------+
++--------------------------+   obs-websocket   +-----------------------+
+|  OBS Studio              |<----------------->|  Open Spark backend   |
+|  · Open Spark dock (Qt)  |       HTTP        |  FastAPI @127.0.0.1    |
+|  · Browser / camera /    |<----------------->|  agent + tool calling |
+|    filters / scenes      |                   |  LiteLLM (any model)  |
++--------------------------+                   |  secrets (env/keyring)|
+                                               +-----------------------+
 ```
 
-## Quick start (dev)
+Everything runs in containers via `start.sh`. The container's OBS uses
+a **portable** config under `./.portable-obs/` — your host's real OBS
+install is never touched.
+
+---
+
+## Install
+
+### Prerequisites
+
+- Docker + Docker Compose v2
+- Linux with X11/Wayland for the containerized OBS (the backend alone is
+  cross-platform)
+- An LLM API key (or a free one — see *Configure LLM* below)
+
+### 1. Get the code & configure
 
 ```bash
-git clone https://github.com/youruser/open-spark open-spark
+git clone https://github.com/<your-org>/open-spark.git
 cd open-spark
-python -m venv .venv && source .venv/bin/activate   # Linux/macOS
-# .venv\Scripts\activate                            # Windows PowerShell
-pip install -e ".[dev]"
-
-# 1. Run backend in mock mode (no OBS needed)
-open-spark --mock
-
-# 2. Open http://127.0.0.1:8765 in any browser to drive it
+cp .env.compose.example .env
+# edit .env: set ONE provider key + OPENSPARK_DEFAULT_MODEL
 ```
 
-To run against real OBS:
+`.env` is gitignored and is for **local testing only**. In production,
+secrets live in the OS keyring instead.
 
-1. OBS → Tools → WebSocket Server Settings → Enable, set password.
-2. Store the password: `python -c "import keyring; keyring.set_password('open-spark','obs-ws-password','YOUR_PASSWORD')"`
-3. `open-spark`
-
-## Install the OBS dock
+### 2. Bring up the stack
 
 ```bash
-open-spark-install-dock
+./start.sh            # build + start backend + OBS, follow logs
+./start.sh smoke      # quick health check (no OBS needed)
 ```
 
-Edits OBS `global.ini` (Linux: `~/.config/obs-studio/`, Flatpak:
-`~/.var/app/com.obsproject.Studio/config/obs-studio/`, Windows:
-`%APPDATA%\obs-studio\`) to add a Custom Browser Dock entry pointing at
-`http://127.0.0.1:8765`. Restart OBS, then dock shows up under
-Docks menu.
+The agent backend listens on `http://127.0.0.1:8765`.
 
-## Test against a sandboxed OBS (don't risk your real config)
-
-**Recommended (Linux, rootless Podman):**
+### 3. Load the OBS plugin
 
 ```bash
-./scripts/run_obs_container.sh
+./start.sh plugin-reload   # compile the native plugin + restart OBS
 ```
 
-Builds and runs `localhost/spark-obs:latest` (Fedora + OBS Studio 31)
-inside a rootless Podman container. Auto-passthrough for:
+In OBS: **View → Docks → Open Spark**. Drag it beside the canvas. The
+dock has two tabs: **Agent** (chat) and **Settings**.
 
-- Display: Wayland socket preferred, X11 fallback
-- GPU: `/dev/dri` (Intel/AMD); NVIDIA via `--device nvidia.com/gpu=all`
-  if `nvidia-container-toolkit` is installed
-- Audio: PipeWire socket, with PulseAudio fallback
-- Webcams: every `/dev/video*` on the host
-- DBus session bus (xdg-desktop-portal, screencast)
+> `obs-websocket` is auto-configured by the plugin — no manual setup.
 
-The container's OBS uses `--portable` against `./.portable-obs/` (bind
-mount) — your host's real OBS config is **never** touched. UID is
-preserved via `--userns=keep-id`, so the bind-mount stays writable as
-your host user.
+### Other useful commands
 
-`obs-websocket` (built into OBS 28+) listens on host port 4455 because
-the container uses `--network=host`. No port forwarding needed.
+| Command | What it does |
+|---|---|
+| `./start.sh app` | backend only (use your own OBS + plugin) |
+| `./start.sh obs` | OBS container only (fast plugin iteration) |
+| `./start.sh down` | stop & remove containers |
+| `./start.sh logs [backend\|obs]` | tail logs |
+| `./start.sh test` | run the pytest suite in-container |
+| `./start.sh plugin-build` | compile plugin without restarting OBS |
+| `./start.sh clean` | **destructive** — wipe `.data` + portable OBS |
 
-**Fallback (no Podman, or Windows):**
+Run `./start.sh help` for the full list.
 
-```bash
-./scripts/run_portable_obs.sh   # Linux native / Flatpak
-./scripts/run_portable_obs.ps1  # Windows
-```
-
-These boot the host's OBS install with `--portable` against
-`./.portable-obs/`. Less isolated than the container, but works without
-Podman.
+---
 
 ## Configure LLM
 
-Open the dock (or `http://127.0.0.1:8765/settings`), pick provider, paste
-API key. Stored via `keyring` on the OS credential store.
+Pick a provider, set its key in `.env` (local) or via the dock
+**Settings** tab → *Save key* (keyring). Set `OPENSPARK_DEFAULT_MODEL`
+to a `provider/model` id.
 
-Supported via LiteLLM: Anthropic, OpenAI, Gemini, Groq, Mistral, Cohere,
-local Ollama / vLLM / LM Studio (set custom base URL).
+Free / cheap to start:
 
-## Layout
+| Provider | Where | Model id example |
+|---|---|---|
+| NVIDIA NIM | build.nvidia.com (free credits) | `nvidia_nim/meta/llama-3.3-70b-instruct` |
+| OpenRouter | openrouter.ai (`:free` tier) | `openrouter/qwen/qwen-2.5-coder-32b-instruct:free` |
+| Anthropic | console.anthropic.com | `anthropic/claude-sonnet-4-6` |
+| OpenAI | platform.openai.com | `openai/gpt-4o` |
+| Ollama (local) | self-hosted | `ollama/llama3.1` (+ `OPENSPARK_LLM_BASE_URL`) |
+
+**The agent needs a model that supports tool/function calling.** The
+Settings tab validates your pick and suggests known-good models if it
+won't work. Overlay generation works on any model.
+
+---
+
+## Using the agent
+
+Type what you want in the **Agent** tab. Slash shortcuts run locally
+(they never hit the LLM):
+
+| Command | Action |
+|---|---|
+| `/help` | list shortcuts |
+| `/clear` (`/new`, `/reset`) | wipe the conversation |
+| `/undo` | remove inputs the agent added last turn |
+| `/dry [on\|off]` | toggle dry-run (confirm destructive). No arg = flip |
+| `/tools` | list everything the agent can do |
+| `/status` | backend + OBS connection state |
+
+The agent acts only on your most recent message and operates on exactly
+the targets you name. Destructive actions need confirmation unless
+dry-run is off.
+
+---
+
+## Packaging (Linux)
+
+Self-hosted artifacts are produced by CI on `v*` tags:
+
+- `.rpm` / `.deb` — `packaging/rpm/obs-open-spark.spec`, fpm-built
+- Flatpak extension — `packaging/flatpak/com.obsproject.Studio.Plugin.OpenSpark*.yml`
+
+**Flathub:** ships as an addon that extends the OBS Studio Flatpak:
+
+```bash
+flatpak install flathub com.obsproject.Studio.Plugin.OpenSpark
+```
+
+Submission is a manual PR to `flathub/flathub` — full steps in
+`packaging/README.md`.
+
+---
+
+## Project layout
 
 ```
 src/open_spark/
-  main.py           FastAPI app + lifespan (boot OBS client, LLM)
-  config.py         Settings (env + JSON), path resolution per OS
-  secrets_store.py  keyring wrapper
-  obs_client.py     obs-websocket client + MockOBSClient
-  llm.py            LiteLLM wrapper with overlay-focused system prompt
-  overlays.py       in-process registry + on-disk overlay storage
+  main.py           FastAPI app + lifespan
+  config.py         Settings (env "OPENSPARK_" prefix + JSON)
+  agent.py          tool-calling agent loop + model validation
+  tools.py          ~34 OBS tools (overlays, camera, filters, audio…)
+  llm.py            LiteLLM wrapper, overlay prompts, style presets
+  obs_client.py     obs-websocket client + MockOBSClient (tests)
+  secrets_store.py  env / keyring secrets
   api/              FastAPI routers
-  static/           dock UI (vanilla HTML/CSS/JS)
-scripts/            install_dock, portable OBS launchers
+plugin/             native Qt OBS plugin (C++/CMake)
+packaging/          rpm spec + Flatpak manifest
+scripts/            export_openapi, install_dock
 tests/              pytest suite (mock OBS)
+start.sh            containerized dev stack launcher
 ```
+
+API spec: `openapi.yaml` (kept in sync by CI).
+
+## Development
+
+See `docs/development.md`. Tests, lint, and OpenAPI sync run in CI
+(`.github/workflows/`).
 
 ## License
 

@@ -6,7 +6,8 @@ Three install paths supported for the `obs-open-spark` plugin:
 |------|-------------|----------|
 | `.rpm` | Fedora, RHEL, openSUSE, any rpm-based distro | CI (`plugin-build.yml`) via `fpm`; alt: `rpmbuild` from `rpm/obs-open-spark.spec` |
 | `.deb` | Debian, Ubuntu, derivatives | CI (`plugin-build.yml`) via `fpm` |
-| Flatpak extension | Users running the official OBS Studio Flatpak (`com.obsproject.Studio`) | CI (`plugin-build.yml` → `flatpak` job) using `flatpak/com.openspark.Plugin.yml` |
+| Flatpak extension (self-hosted) | Users running the official OBS Studio Flatpak (`com.obsproject.Studio`) | CI (`plugin-build.yml` → `flatpak` job) from `flatpak/com.obsproject.Studio.Plugin.OpenSpark.local.yml` |
+| Flathub | Anyone — `flatpak install flathub com.obsproject.Studio.Plugin.OpenSpark` | Manual PR to `github.com/flathub/flathub` using the pinned-git manifest (see below) |
 | `.tar` artifact | Manual / portable install | CI (default artifact, drop into `~/.config/obs-studio/plugins/`) |
 
 ## Install snippets
@@ -58,7 +59,55 @@ fpm -s dir -t rpm -n obs-open-spark -v 0.1.0 \
 tar czf ~/rpmbuild/SOURCES/obs-open-spark-0.1.0.tar.gz .
 rpmbuild -ba packaging/rpm/obs-open-spark.spec
 
-# flatpak
+# flatpak (local build from the working tree)
 flatpak-builder --user --install build-flatpak \
-    packaging/flatpak/com.openspark.Plugin.yml
+    packaging/flatpak/com.obsproject.Studio.Plugin.OpenSpark.local.yml
+```
+
+## Publishing to Flathub
+
+Open Spark ships as an AppStream **addon** that extends the official OBS
+Studio Flatpak. Flathub builds in a clean, network-isolated sandbox, so
+the submission uses the pinned-git manifest
+`flatpak/com.obsproject.Studio.Plugin.OpenSpark.yml` (not the `.local`
+one) plus `plugin/com.obsproject.Studio.Plugin.OpenSpark.metainfo.xml`.
+
+### One-time prep
+
+1. Tag a release and push it: `git tag v0.1.0 && git push origin v0.1.0`.
+2. Resolve the tag commit: `git rev-list -n 1 v0.1.0`.
+3. Replace the `open-spark-app/open-spark` placeholder with the real
+   public repo owner in **both** the manifest (`url:`) and
+   `plugin/com.obsproject.Studio.Plugin.OpenSpark.metainfo.xml` (the
+   three `<url>` entries). In the manifest also set `commit:` to the
+   SHA from step 2. Confirm `runtime-version` matches current OBS:
+   `flatpak info -m com.obsproject.Studio | grep runtime`.
+4. Validate locally:
+   ```bash
+   appstreamcli validate --pedantic \
+     plugin/com.obsproject.Studio.Plugin.OpenSpark.metainfo.xml
+   flatpak run org.flatpak.Builder --force-clean \
+     build-flathub packaging/flatpak/com.obsproject.Studio.Plugin.OpenSpark.yml
+   flatpak run --command=flatpak-builder-lint org.flatpak.Builder \
+     manifest packaging/flatpak/com.obsproject.Studio.Plugin.OpenSpark.yml
+   ```
+
+### Submit
+
+1. Fork `github.com/flathub/flathub`, branch from `master` named
+   `com.obsproject.Studio.Plugin.OpenSpark`.
+2. Add the manifest as `com.obsproject.Studio.Plugin.OpenSpark.yml` at
+   the repo root (the metainfo is pulled from our git source by the
+   build — it does not go in the submission repo).
+3. Open a PR. The Flathub bot builds it; a reviewer checks the addon
+   extends `com.obsproject.Studio` and the metainfo validates.
+4. On merge, Flathub creates a dedicated
+   `flathub/com.obsproject.Studio.Plugin.OpenSpark` repo. Future
+   releases = bump `tag`/`commit` there (optionally automated with
+   `flatpak-external-data-checker`).
+
+Install once published:
+
+```bash
+flatpak install flathub com.obsproject.Studio.Plugin.OpenSpark
 ```

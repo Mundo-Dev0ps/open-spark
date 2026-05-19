@@ -1,0 +1,36 @@
+# Local / CI Flatpak manifest — builds the extension from the working
+# tree (no network, no pinned git). Used by `start.sh`, the plugin-build
+# CI job, and `flatpak-builder` runs on PRs/branches where no tag exists.
+#
+# For the actual Flathub submission use the sibling manifest WITHOUT the
+# `.local` suffix (pinned git source).
+#
+#   flatpak-builder --user --install build-flatpak \
+#       packaging/flatpak/com.obsproject.Studio.Plugin.OpenSpark.local.yml
+
+id: com.obsproject.Studio.Plugin.OpenSpark
+runtime: org.kde.Platform
+runtime-version: "6.7"
+sdk: org.kde.Sdk
+
+build-extension: true
+appstream-compose: true
+build-options:
+  prefix: /app/plugins/OpenSpark
+separate-locales: false
+
+modules:
+  - name: obs-open-spark
+    buildsystem: cmake-ninja
+    builddir: true
+    config-opts:
+      - -DCMAKE_BUILD_TYPE=Release
+      - -DCMAKE_INSTALL_PREFIX=/app/plugins/OpenSpark
+    sources:
+      - type: dir
+        path: ../../plugin
+    cleanup:
+      - /include
+      - /lib/pkgconfig
+      - "*.la"
+      - "*.a"

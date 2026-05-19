@@ -1,0 +1,50 @@
+# Flathub submission manifest — Open Spark OBS plugin.
+#
+# This is the manifest you copy into the Flathub submission repo
+# (github.com/flathub/flathub, see packaging/README.md → "Publishing to
+# Flathub"). It builds the plugin as an *extension* of the official OBS
+# Studio Flatpak (com.obsproject.Studio), which auto-discovers any
+# extension whose ID starts with `com.obsproject.Studio.Plugin.`.
+#
+# Flathub builds in a clean, network-isolated sandbox, so the source
+# MUST be a pinned git tag + commit (no local dirs, no floating refs).
+# For local / CI builds use the *.local.yml manifest instead.
+#
+# runtime-version MUST match whatever org.kde.Platform the current
+# com.obsproject.Studio build uses. Check before submitting:
+#   flatpak info -m com.obsproject.Studio | grep runtime
+
+id: com.obsproject.Studio.Plugin.OpenSpark
+runtime: org.kde.Platform
+runtime-version: "6.7"
+sdk: org.kde.Sdk
+
+build-extension: true
+appstream-compose: true
+build-options:
+  prefix: /app/plugins/OpenSpark
+separate-locales: false
+
+modules:
+  - name: obs-open-spark
+    buildsystem: cmake-ninja
+    builddir: true
+    config-opts:
+      - -DCMAKE_BUILD_TYPE=Release
+      - -DCMAKE_INSTALL_PREFIX=/app/plugins/OpenSpark
+    sources:
+      - type: git
+        url: https://github.com/open-spark-app/open-spark.git
+        tag: v0.1.0
+        # Flathub requires the exact commit the tag points at. Fill this
+        # with `git rev-list -n 1 v0.1.0` before opening the PR.
+        commit: REPLACE_WITH_TAG_COMMIT_SHA
+    # The plugin's CMakeLists installs:
+    #   <prefix>/lib/obs-plugins/obs-open-spark.so
+    #   <prefix>/share/obs/obs-plugins/obs-open-spark/locale/*.ini
+    #   <prefix>/share/metainfo/com.obsproject.Studio.Plugin.OpenSpark.metainfo.xml
+    cleanup:
+      - /include
+      - /lib/pkgconfig
+      - "*.la"
+      - "*.a"

@@ -132,4 +132,11 @@ else()
     install(DIRECTORY data/locale
         DESTINATION "${CMAKE_INSTALL_DATADIR}/obs/obs-plugins/${PLUGIN_NAME}"
     )
+    # AppStream metainfo — required by Flathub for the OBS plugin
+    # extension. Installed for every Linux install (rpm/deb too) so the
+    # software centre can describe the add-on.
+    install(FILES
+        "${CMAKE_CURRENT_SOURCE_DIR}/com.obsproject.Studio.Plugin.OpenSpark.metainfo.xml"
+        DESTINATION "${CMAKE_INSTALL_DATADIR}/metainfo"
+    )
 endif()

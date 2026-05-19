@@ -24,6 +24,7 @@
 #include <QMessageBox>
 #include <QPlainTextEdit>
 #include <QPushButton>
+#include <QRegularExpression>
 #include <QScrollArea>
 #include <QScrollBar>
 #include <QSpinBox>
@@ -313,7 +314,7 @@ QWidget *OpenSparkDock::buildAgentTab()
     agentInput_ = new QPlainTextEdit(w);
     agentInput_->setPlaceholderText(QStringLiteral(
         "Tell the agent what to do — e.g. \"add my webcam bottom-right "
-        "with a chroma key and a neon frame, then a chat box on the left\""));
+        "with a chroma key and a neon frame\".  Type /help for shortcuts."));
     agentInput_->setMaximumHeight(70);
     v->addWidget(agentInput_);
 
@@ -338,22 +339,15 @@ QWidget *OpenSparkDock::buildAgentTab()
     v->addLayout(row);
     QObject::connect(agentUndoBtn_, &QPushButton::clicked, this,
                      &OpenSparkDock::agentDoUndo);
-    QObject::connect(agentNewBtn, &QPushButton::clicked, this, [this]() {
-        agentHistory_.clear();
-        agentLastCreatedInputs_.clear();
-        agentUndoBtn_->setEnabled(false);
-        agentView_->setHtml(
-            "<div style='color:#8a8f9c'>New conversation. Old context "
-            "cleared.</div>");
-        http_->del(QStringLiteral("/api/agent/session"),
-                   [](const openspark::HttpResult &) {});
-    });
+    QObject::connect(agentNewBtn, &QPushButton::clicked, this,
+                     &OpenSparkDock::agentResetConversation);
 
     agentView_->setHtml(
         "<div style='color:#8a8f9c'>Open Spark agent. It can build "
         "overlays, whole scenes, add your camera, set transforms and "
         "apply filters (chroma key, color, sharpen, LUT, borders). "
-        "Ask in plain language.</div>");
+        "Ask in plain language, or type <code>/help</code> for "
+        "shortcuts.</div>");
 
     QObject::connect(agentSendBtn_, &QPushButton::clicked, this,
                      &OpenSparkDock::doAgentSend);
@@ -1172,6 +1166,7 @@ void OpenSparkDock::agentAppend(const QString &role, const QString &html)
     else if (role == "assistant") { color = "#9be8ff"; label = "agent"; }
     else if (role == "tool") { color = "#ffb14a"; label = "tool"; }
     else if (role == "error") { color = "#ff5470"; label = "error"; }
+    else if (role == "system") { color = "#8a8f9c"; label = "open spark"; }
     agentView_->append(
         QStringLiteral(
             "<div style='margin:6px 0'>"
@@ -1187,6 +1182,14 @@ void OpenSparkDock::doAgentSend()
 {
     const QString text = agentInput_->toPlainText().trimmed();
     if (text.isEmpty()) return;
+
+    // Slash shortcuts run locally — they never reach the LLM.
+    if (text.startsWith(QLatin1Char('/'))) {
+        if (agentHandleSlash(text)) {
+            agentInput_->clear();
+            return;
+        }
+    }
 
     agentHistory_ << text;  // store raw user content; role inferred by index
     agentAppend(QStringLiteral("user"), text.toHtmlEscaped());
@@ -1288,6 +1291,131 @@ void OpenSparkDock::doAgentSend()
                 agentAppend(QStringLiteral("error"), err.toHtmlEscaped());
             }
         });
+}
+
+void OpenSparkDock::agentResetConversation()
+{
+    agentHistory_.clear();
+    agentLastCreatedInputs_.clear();
+    if (agentUndoBtn_) agentUndoBtn_->setEnabled(false);
+    if (agentView_)
+        agentView_->setHtml(
+            "<div style='color:#8a8f9c'>New conversation. Old context "
+            "cleared.</div>");
+    http_->del(QStringLiteral("/api/agent/session"),
+               [](const openspark::HttpResult &) {});
+}
+
+// Local "/" shortcuts. Returns true when the input was a command and was
+// handled here (so it must NOT be sent to the agent). Unknown commands
+// are also "handled" (we print an error) to avoid leaking a stray "/foo"
+// into the LLM transcript.
+bool OpenSparkDock::agentHandleSlash(const QString &text)
+{
+    const QStringList parts = text.split(QRegularExpression("\\s+"),
+                                         Qt::SkipEmptyParts);
+    if (parts.isEmpty()) return false;
+    const QString cmd = parts.first().toLower();
+    const QString arg = parts.size() > 1 ? parts.at(1).toLower() : QString();
+
+    if (cmd == "/help" || cmd == "/?") {
+        agentAppend(QStringLiteral("system"), QStringLiteral(
+            "<b>Shortcuts</b><br>"
+            "<code>/help</code> — this list<br>"
+            "<code>/clear</code> (<code>/new</code>, <code>/reset</code>) "
+            "— wipe the conversation<br>"
+            "<code>/undo</code> — remove inputs the agent added last turn"
+            "<br><code>/dry [on|off]</code> — toggle dry-run "
+            "(confirm destructive). No arg = flip<br>"
+            "<code>/tools</code> — list what the agent can do<br>"
+            "<code>/status</code> — backend + OBS connection"));
+        return true;
+    }
+    if (cmd == "/clear" || cmd == "/new" || cmd == "/reset") {
+        agentResetConversation();
+        return true;
+    }
+    if (cmd == "/undo") {
+        if (agentUndoBtn_ && agentUndoBtn_->isEnabled())
+            agentDoUndo();
+        else
+            agentAppend(QStringLiteral("system"),
+                        QStringLiteral("Nothing to undo."));
+        return true;
+    }
+    if (cmd == "/dry") {
+        if (!agentDryRun_) return true;
+        bool on = !agentDryRun_->isChecked();
+        if (arg == "on" || arg == "1" || arg == "true") on = true;
+        else if (arg == "off" || arg == "0" || arg == "false") on = false;
+        agentDryRun_->setChecked(on);
+        agentAppend(QStringLiteral("system"),
+                    QStringLiteral("Dry-run is now <b>%1</b>.")
+                        .arg(on ? "ON (destructive actions need confirm)"
+                                : "OFF (destructive actions apply)"));
+        return true;
+    }
+    if (cmd == "/tools") {
+        agentAppend(QStringLiteral("system"),
+                    QStringLiteral("Fetching tool catalogue…"));
+        http_->getJson(
+            QStringLiteral("/api/agent/tools"),
+            [this](const openspark::HttpResult &r) {
+                if (!r.ok) {
+                    agentAppend(QStringLiteral("error"),
+                                QStringLiteral("Could not load tools."));
+                    return;
+                }
+                const auto arr = QJsonDocument::fromJson(r.body)
+                                     .object()
+                                     .value("tools")
+                                     .toArray();
+                QString out = QStringLiteral("<b>%1 tools</b><br>")
+                                  .arg(arr.size());
+                for (const auto &tv : arr) {
+                    const auto t = tv.toObject();
+                    const bool d = t.value("destructive").toBool();
+                    out += QStringLiteral(
+                        "<code>%1</code>%2 — %3<br>")
+                        .arg(t.value("name").toString().toHtmlEscaped(),
+                             d ? " ⚠" : "",
+                             t.value("description").toString()
+                                 .toHtmlEscaped());
+                }
+                agentAppend(QStringLiteral("system"), out);
+            });
+        return true;
+    }
+    if (cmd == "/status") {
+        http_->getJson(
+            QStringLiteral("/api/status"),
+            [this](const openspark::HttpResult &r) {
+                if (!r.ok) {
+                    agentAppend(QStringLiteral("error"),
+                                QStringLiteral("Backend unreachable."));
+                    return;
+                }
+                const auto o = QJsonDocument::fromJson(r.body).object();
+                agentAppend(
+                    QStringLiteral("system"),
+                    QStringLiteral(
+                        "OBS: <b>%1</b> · LLM key: <b>%2</b> · "
+                        "model: <code>%3</code>")
+                        .arg(o.value("obs_connected").toBool()
+                                 ? "connected" : "offline",
+                             o.value("has_default_llm_key").toBool()
+                                 ? "set" : "missing",
+                             o.value("default_model").toString()
+                                 .toHtmlEscaped()));
+            });
+        return true;
+    }
+
+    agentAppend(QStringLiteral("system"),
+                QStringLiteral("Unknown command <code>%1</code>. "
+                               "Type <code>/help</code>.")
+                    .arg(cmd.toHtmlEscaped()));
+    return true;
 }
 
 void OpenSparkDock::agentLoadSession()

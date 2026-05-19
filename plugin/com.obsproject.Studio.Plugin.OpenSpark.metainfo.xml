@@ -1,0 +1,52 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- AppStream metainfo for the Open Spark OBS plugin, published on
+     Flathub as an addon that extends the official OBS Studio Flatpak
+     (com.obsproject.Studio). Validate with: appstreamcli validate -->
+<component type="addon">
+  <id>com.obsproject.Studio.Plugin.OpenSpark</id>
+  <extends>com.obsproject.Studio</extends>
+
+  <name>Open Spark</name>
+  <summary>Build and tune your OBS scene by talking to it</summary>
+
+  <metadata_license>MIT</metadata_license>
+  <project_license>MIT</project_license>
+
+  <description>
+    <p>
+      Open Spark adds a conversational agent dock to OBS Studio. Describe
+      an overlay, a camera layout, a filter or a whole scene in plain
+      language and a local LLM agent calls OBS for you to make it happen.
+    </p>
+    <p>
+      Local-first and LLM-agnostic — Anthropic, OpenAI, Gemini, Groq,
+      DeepSeek, NVIDIA NIM, OpenRouter or a local Ollama / vLLM model.
+      Destructive actions run in dry-run and ask for confirmation first.
+    </p>
+    <p>
+      This extension ships only the native OBS plugin. It talks over
+      loopback to the Open Spark Python backend, which you run separately
+      (see the project README).
+    </p>
+  </description>
+
+  <url type="homepage">https://github.com/open-spark-app/open-spark</url>
+  <url type="bugtracker">https://github.com/open-spark-app/open-spark/issues</url>
+  <url type="vcs-browser">https://github.com/open-spark-app/open-spark</url>
+
+  <developer id="app.open-spark">
+    <name>Open Spark Contributors</name>
+  </developer>
+  <update_contact>velascojonathanxd_AT_gmail.com</update_contact>
+
+  <content_rating type="oars-1.1"/>
+
+  <releases>
+    <release version="0.1.0" date="2026-05-19">
+      <description>
+        <p>First public MVP: conversational agent dock, slash shortcuts,
+        natural-language overlays, camera / filter / scene control.</p>
+      </description>
+    </release>
+  </releases>
+</component>

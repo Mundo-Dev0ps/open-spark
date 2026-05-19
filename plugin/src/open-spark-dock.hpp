@@ -106,6 +106,8 @@ private:
     QStringList agentLastCreatedInputs_;  // for one-click undo
     void agentLoadSession();
     void agentDoUndo();
+    void agentResetConversation();
+    bool agentHandleSlash(const QString &text);
 
     // "Generate overlay" group.
     QPlainTextEdit *promptEdit_ = nullptr;

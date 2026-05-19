@@ -118,11 +118,24 @@ jobs:
       options: --privileged
     steps:
       - uses: actions/checkout@v4
+
+      - name: Validate AppStream metainfo
+        # --no-net: URL reachability is environmental (Flathub's own
+        # buildbot does the networked check against the public repo).
+        # The single pedantic note is the uppercase CID, which is the
+        # required naming convention for OBS plugin extensions.
+        run: |
+          appstreamcli validate --no-net \
+            plugin/com.obsproject.Studio.Plugin.OpenSpark.metainfo.xml
+
       - name: Build Flatpak extension
         uses: flatpak/flatpak-github-actions/flatpak-builder@v6
         with:
           bundle: obs-open-spark.flatpak
-          manifest-path: packaging/flatpak/com.openspark.Plugin.yml
+          # CI builds from the working tree (the .local manifest). The
+          # pinned-git manifest without the suffix is the one submitted
+          # to Flathub.
+          manifest-path: packaging/flatpak/com.obsproject.Studio.Plugin.OpenSpark.local.yml
           cache-key: flatpak-builder-${{ github.sha }}
 
   windows:
@@ -219,9 +232,9 @@ jobs:
   # ---------------------------------------------------------------------------
   # release: only runs on tag pushes (v0.1.0, v0.2.0, …). Pulls every
   # platform artifact from the matrix jobs above, packs them, and
-  # attaches them to a fresh GitHub Release. This is the "self-hosted
-  # Flatpak / MVP option C" distribution path — Flathub submission is
-  # intentionally not part of this flow.
+  # attaches them to a fresh GitHub Release (self-hosted distribution).
+  # Flathub is published separately via a PR to github.com/flathub/flathub
+  # using the pinned-git manifest — see packaging/README.md.
   # ---------------------------------------------------------------------------
   release:
     name: GitHub Release

@@ -513,6 +513,18 @@ async def agent_session() -> dict:
         return {"messages": [], "created_inputs": []}
 
 
+@router.delete("/api/agent/session")
+async def agent_session_clear() -> dict:
+    """Wipe the persisted transcript so the next chat starts fresh —
+    avoids an old goal contaminating a new conversation."""
+    p = _agent_session_path()
+    try:
+        p.unlink(missing_ok=True)
+    except OSError:
+        pass
+    return {"cleared": True}
+
+
 @router.post("/api/agent/undo")
 async def agent_undo(request: Request, payload: dict) -> dict:
     """Remove inputs the agent created (whole turn undo).

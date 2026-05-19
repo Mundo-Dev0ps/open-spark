@@ -325,15 +325,29 @@ QWidget *OpenSparkDock::buildAgentTab()
         "Remove the inputs the agent added in its last turn"));
     agentUndoBtn_->setStyleSheet("color:#ff5470; border-color:#ff5470;");
     agentUndoBtn_->setEnabled(false);
+    auto *agentNewBtn = new QPushButton(QStringLiteral("New chat"), w);
+    agentNewBtn->setToolTip(QStringLiteral(
+        "Clear the conversation so an old goal can't carry over"));
     agentSendBtn_ = new QPushButton(QStringLiteral("Send"), w);
     agentSendBtn_->setProperty("primary", true);
     row->addWidget(agentDryRun_);
     row->addStretch(1);
+    row->addWidget(agentNewBtn);
     row->addWidget(agentUndoBtn_);
     row->addWidget(agentSendBtn_);
     v->addLayout(row);
     QObject::connect(agentUndoBtn_, &QPushButton::clicked, this,
                      &OpenSparkDock::agentDoUndo);
+    QObject::connect(agentNewBtn, &QPushButton::clicked, this, [this]() {
+        agentHistory_.clear();
+        agentLastCreatedInputs_.clear();
+        agentUndoBtn_->setEnabled(false);
+        agentView_->setHtml(
+            "<div style='color:#8a8f9c'>New conversation. Old context "
+            "cleared.</div>");
+        http_->del(QStringLiteral("/api/agent/session"),
+                   [](const openspark::HttpResult &) {});
+    });
 
     agentView_->setHtml(
         "<div style='color:#8a8f9c'>Open Spark agent. It can build "

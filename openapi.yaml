@@ -657,6 +657,21 @@ paths:
           description: Validation Error
       summary: Agent Model Check
   /api/agent/session:
+    delete:
+      description: 'Wipe the persisted transcript so the next chat starts fresh —
+
+        avoids an old goal contaminating a new conversation.'
+      operationId: agent_session_clear_api_agent_session_delete
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                additionalProperties: true
+                title: Response Agent Session Clear Api Agent Session Delete
+                type: object
+          description: Successful Response
+      summary: Agent Session Clear
     get:
       description: Return the last persisted agent transcript (for dock resume).
       operationId: agent_session_api_agent_session_get

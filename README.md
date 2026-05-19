@@ -13,6 +13,7 @@ plain language — a local LLM agent drives OBS and makes it happen.
 ![status](https://img.shields.io/badge/status-early%20MVP-orange)
 ![license](https://img.shields.io/badge/license-MIT-blue)
 ![platform](https://img.shields.io/badge/OBS-30%2B-7e57c2)
+[![Ko-fi](https://img.shields.io/badge/Ko--fi-Support-FF5E5B?logo=ko-fi&logoColor=white)](https://ko-fi.com/donjonny)
 
 </div>
 
@@ -194,6 +195,21 @@ cp .env.compose.example .env     # set ONE provider key + model
 +--------------------------+                   |  secrets (env/keyring)|
                                                +-----------------------+
 ```
+
+---
+
+## 💛 Support & collaborate
+
+Open Spark is free and MIT. If it saves you setup time, fuel it with a
+coffee — or team up to build features:
+
+<div align="center">
+
+[![Ko-fi](https://img.shields.io/badge/Ko--fi-Buy%20me%20a%20coffee-FF5E5B?logo=ko-fi&logoColor=white&style=for-the-badge)](https://ko-fi.com/donjonny)
+
+</div>
+
+🤝 PRs, issues and ideas welcome — open a ticket or say hi on Ko-fi.
 
 ---
 

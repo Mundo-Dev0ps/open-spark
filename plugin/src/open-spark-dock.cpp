@@ -1230,12 +1230,26 @@ void OpenSparkDock::doAgentSend()
                 const auto pending =
                     o.value("pending_confirmation").toArray();
                 if (!pending.isEmpty()) {
+                    QString lines;
+                    for (const auto &pv : pending) {
+                        const auto p = pv.toObject();
+                        const QString t = p.value("tool").toString();
+                        const QString a = QString::fromUtf8(
+                            QJsonDocument(p.value("args").toObject())
+                                .toJson(QJsonDocument::Compact));
+                        lines += QStringLiteral(
+                            "<br>&nbsp;&nbsp;• <code>%1</code> "
+                            "<span style='color:#8a8f9c'>%2</span>")
+                            .arg(t.toHtmlEscaped(), a.toHtmlEscaped());
+                    }
                     agentAppend(
                         QStringLiteral("tool"),
-                        QStringLiteral("%1 destructive action(s) need "
-                                       "confirmation — uncheck Dry-run "
-                                       "and resend to apply.")
-                            .arg(pending.size()));
+                        QStringLiteral(
+                            "%1 destructive action(s) need confirmation. "
+                            "Review the exact target(s), then UNCHECK "
+                            "Dry-run and resend to apply:%2")
+                            .arg(pending.size())
+                            .arg(lines));
                 }
                 agentLastCreatedInputs_.clear();
                 for (const auto &iv : o.value("created_inputs").toArray()) {

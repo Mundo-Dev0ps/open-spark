@@ -197,6 +197,12 @@ class MockOBSClient:
                 self.scenes.remove(sn)
                 self.scenes.append(sn)
             return {}
+        if rt == "RemoveScene":
+            sn = data.get("sceneName")
+            if sn in self.scenes and len(self.scenes) > 1:
+                self.scenes.remove(sn)
+                self.scene_items.pop(sn, None)
+            return {"ok": True, "mock": True}
         if rt in (
             "CreateSourceFilter", "SetSourceFilterSettings",
             "RemoveSourceFilter", "SetSceneItemTransform",

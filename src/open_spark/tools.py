@@ -287,6 +287,43 @@ async def _t_switch_scene(state, scene):
 
 
 @tool(
+    "delete_scene",
+    "Delete a scene by its EXACT name. Destructive — gated behind "
+    "confirmation. OBS always keeps at least one scene, so deleting "
+    "the very last one will fail; to clear everything, delete every "
+    "scene except one.",
+    {
+        "type": "object",
+        "properties": {"scene": {"type": "string"}},
+        "required": ["scene"],
+    },
+    destructive=True,
+)
+async def _t_delete_scene(state, scene):
+    # If we're about to remove the active scene, OBS rejects it unless
+    # another scene is current. Switch away first when possible.
+    try:
+        sl = await state.obs.raw_request("GetSceneList")
+        names = [s.get("sceneName") for s in sl.get("scenes", [])]
+        current = sl.get("currentProgramSceneName")
+        if scene not in names:
+            return {"error": f"scene {scene!r} not found",
+                    "available": names}
+        others = [n for n in names if n != scene]
+        if not others:
+            return {"error": "OBS must keep at least one scene; "
+                             "cannot delete the only scene"}
+        if current == scene:
+            await state.obs.raw_request(
+                "SetCurrentProgramScene", {"sceneName": others[0]}
+            )
+    except Exception:  # noqa: BLE001 — best-effort guard
+        pass
+    await state.obs.raw_request("RemoveScene", {"sceneName": scene})
+    return {"deleted_scene": scene}
+
+
+@tool(
     "list_scene_items",
     "List the sources (scene items) of a scene with their ids.",
     {

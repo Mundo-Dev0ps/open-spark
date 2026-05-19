@@ -270,3 +270,29 @@ def test_agent_chat_rejects_unsupported_model(
     detail = r.json()["detail"]
     assert "tool calling" in detail["error"]
     assert detail["suggestions"]
+
+
+@pytest.mark.asyncio
+async def test_delete_scene_tool(settings, tmp_app_dir) -> None:
+    from open_spark.main import AppState
+    from open_spark.obs_client import MockOBSClient
+    from open_spark.overlays import OverlayStore
+
+    obs = MockOBSClient()
+    obs.scenes = ["Scene", "Open Spark", "Doomed"]
+    await obs.connect()
+    st = AppState(settings=settings, obs=obs,
+                  overlays=OverlayStore(root=tmp_app_dir / "overlays"))
+
+    out = await tools.dispatch("delete_scene", {"scene": "Doomed"}, st)
+    assert out == {"deleted_scene": "Doomed"}
+    assert "Doomed" not in obs.scenes
+
+    # Unknown scene → error, not crash.
+    bad = await tools.dispatch("delete_scene", {"scene": "Nope"}, st)
+    assert "error" in bad
+
+
+def test_delete_scene_is_destructive() -> None:
+    t = tools.get_tool("delete_scene")
+    assert t is not None and t.destructive is True

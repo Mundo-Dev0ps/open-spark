@@ -186,6 +186,23 @@ jobs:
           name: obs-open-spark-windows-x86_64
           path: artifact/windows
 
+      - name: Build Inno Setup installer
+        shell: pwsh
+        run: |
+          choco install innosetup --no-progress -y
+          $ver = (Select-String -Path plugin\CMakeLists.txt `
+            -Pattern 'VERSION ([0-9]+\.[0-9]+\.[0-9]+)').Matches[0].Groups[1].Value
+          if (-not $ver) { $ver = "0.1.0" }
+          $src = Join-Path $PWD "artifact\windows"
+          & "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe" `
+            "/DMyAppVersion=$ver" "/DSrcDir=$src" `
+            packaging\windows\open-spark.iss
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: obs-open-spark-windows-setup
+          path: packaging/windows/installer-out/obs-open-spark-setup.exe
+
   macos:
     name: macOS universal
     runs-on: macos-14
@@ -228,6 +245,25 @@ jobs:
         with:
           name: obs-open-spark-macos-universal
           path: artifact/macos
+
+      - name: Build .pkg installer
+        run: |
+          set -eux
+          ver=$(grep -oE 'VERSION [0-9]+\.[0-9]+\.[0-9]+' \
+            plugin/CMakeLists.txt | head -1 | awk '{print $2}')
+          ver=${ver:-0.1.0}
+          mkdir -p pkgroot pkg-out
+          cp -R artifact/macos/obs-open-spark.plugin pkgroot/
+          pkgbuild --identifier com.obsproject.Studio.Plugin.OpenSpark \
+            --version "$ver" \
+            --install-location "/Library/Application Support/obs-studio/plugins" \
+            --root pkgroot \
+            pkg-out/obs-open-spark-macos.pkg
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: obs-open-spark-macos-pkg
+          path: pkg-out/obs-open-spark-macos.pkg
 
   # ---------------------------------------------------------------------------
   # release: only runs on tag pushes (v0.1.0, v0.2.0, …). Pulls every
@@ -277,6 +313,16 @@ jobs:
                 release-assets/obs-open-spark-macos-universal.tar.gz .
           fi
 
+          # Windows: double-click installer (.exe).
+          if [[ -d dist/obs-open-spark-windows-setup ]]; then
+            cp dist/obs-open-spark-windows-setup/*.exe release-assets/
+          fi
+
+          # macOS: .pkg installer.
+          if [[ -d dist/obs-open-spark-macos-pkg ]]; then
+            cp dist/obs-open-spark-macos-pkg/*.pkg release-assets/
+          fi
+
           # Flatpak bundle.
           for f in dist/**/*.flatpak; do
             [[ -f "$f" ]] && cp "$f" release-assets/
@@ -294,28 +340,30 @@ jobs:
           body: |
             obs-open-spark ${{ github.ref_name }}
 
-            Native OBS plugin half of the Open Spark stack. Pair with the
-            Python backend (Docker compose, see `start.sh` in the repo)
-            for end-to-end usage.
+            Native OBS plugin. Pair with the Open Spark backend:
+            `pipx install open-spark` (published to PyPI by the
+            `release-pypi` workflow on this tag).
 
-            ## Install
+            ## Install the plugin
 
-            **Fedora / RHEL / openSUSE**
+            **🐧 Linux — dnf (Fedora/RHEL):**
             ```bash
-            sudo dnf install ./obs-open-spark-*.rpm
+            sudo dnf copr enable mundo-dev0ps/open-spark
+            sudo dnf install obs-open-spark
             ```
+            or a local file: `sudo dnf install ./obs-open-spark-*.rpm`
+            · Debian/Ubuntu: `sudo apt install ./obs-open-spark_*.deb`
 
-            **Debian / Ubuntu**
-            ```bash
-            sudo apt install ./obs-open-spark_*.deb
-            ```
-
-            **Flatpak (only if OBS itself is a Flatpak)**
+            **🐧 Linux — Flatpak (OBS is a Flatpak):**
             ```bash
             flatpak install --user obs-open-spark.flatpak
             ```
 
-            **Windows / macOS / portable Linux** — drop the bundle into
-            your OBS plugins directory (see `packaging/README.md`).
+            **🪟 Windows:** run `obs-open-spark-setup.exe`.
+
+            **🍎 macOS:** open `obs-open-spark-macos.pkg`
+            (unsigned — right-click → Open to bypass Gatekeeper).
+
+            See `packaging/README.md` for portable / manual paths.
           files: |
             release-assets/*

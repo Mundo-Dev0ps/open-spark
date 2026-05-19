@@ -133,3 +133,26 @@ Install once published:
 ```bash
 flatpak install flathub com.obsproject.Studio.Plugin.OpenSpark
 ```
+
+## Release channels (CI on `v*` tags)
+
+| Channel | OS | Workflow | One-time setup |
+|---|---|---|---|
+| **PyPI** (backend) | all | `release-pypi.yml` | On pypi.org add a *trusted publisher*: owner `Mundo-Dev0ps`, repo `open-spark`, workflow `release-pypi.yml`, env `pypi`. No secret. |
+| **Fedora COPR** (rpm/dnf) | Linux | `release-copr.yml` | Create COPR project `open-spark`; store the API token block as repo secret `COPR_API_TOKEN`. Skips if unset. |
+| **GitHub Release** (rpm/deb/zip/exe/pkg/flatpak) | all | `plugin-build.yml → release` | none |
+| **Windows installer** | Windows | `plugin-build.yml → windows` | none — Inno Setup `obs-open-spark-setup.exe` |
+| **macOS .pkg** | macOS | `plugin-build.yml → macos` | none (unsigned; notarization needs an Apple Developer ID — later) |
+| **Flathub** | Linux | manual PR | see *Publishing to Flathub* above |
+| **Homebrew cask** | macOS | manual tap | `packaging/homebrew/open-spark.rb` → tap repo `homebrew-tap`; bump `sha256` per release |
+
+Cut a release:
+
+```bash
+git tag v0.1.0 && git push origin v0.1.0
+```
+
+This fans out to `plugin-build`, `release-pypi` and `release-copr`.
+After it lands: `pipx install open-spark` and
+`dnf copr enable mundo-dev0ps/open-spark && dnf install obs-open-spark`
+work; Windows/macOS get the installer assets on the GitHub Release.

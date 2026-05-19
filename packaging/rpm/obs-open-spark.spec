@@ -14,7 +14,7 @@ Release:        1%{?dist}
 Summary:        Open Spark — native OBS plugin (dock + bridge to LLM backend)
 
 License:        MIT
-URL:            https://github.com/mundo-devops/open-spark
+URL:            https://github.com/Mundo-Dev0ps/open-spark
 Source0:        %{name}-%{version}.tar.gz
 
 BuildRequires:  cmake

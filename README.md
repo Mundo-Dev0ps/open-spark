@@ -145,6 +145,9 @@ keyring), or via env. Pick a `provider/model` id:
 | ⚪ OpenAI | platform.openai.com | `openai/gpt-4o` |
 | 🏠 Ollama (local) | self-hosted | `ollama/llama3.1` (+ `OPENSPARK_LLM_BASE_URL`) |
 
+🆓 **No paid key?** Step-by-step to generate free tokens (NVIDIA NIM,
+OpenRouter, Groq, Gemini) → [`docs/llm-tokens.md`](docs/llm-tokens.md).
+
 ⚠️ **The agent needs a tool/function-calling model.** Settings validates
 your pick and suggests known-good ones. Plain overlay generation works
 on any model.

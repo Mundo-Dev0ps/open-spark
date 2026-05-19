@@ -1,0 +1,73 @@
+name: release-copr
+
+# Submits the plugin .src.rpm to Fedora COPR on every v* tag, so users
+# get `dnf copr enable mundo-dev0ps/open-spark && dnf install obs-open-spark`
+# (Fedora / RHEL / derivatives), auto-rebuilt for every active chroot.
+#
+# One-time setup:
+#   1. Create the COPR project at https://copr.fedorainfracloud.org/
+#      (name: open-spark) with the Fedora/EPEL chroots you want.
+#   2. Copy the API token block from https://copr.fedorainfracloud.org/api/
+#      and store it as the repo secret COPR_API_TOKEN (the full
+#      [copr-cli] ... ini section, verbatim).
+#
+# Skips cleanly on forks / when the secret is absent.
+
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  COPR_TARGET: mundo-dev0ps/open-spark   # <owner>/<project> on COPR
+
+jobs:
+  copr:
+    name: Build & submit SRPM to COPR
+    runs-on: ubuntu-24.04
+    if: github.repository == 'Mundo-Dev0ps/open-spark'
+    container:
+      image: fedora:40
+    steps:
+      - name: Install tooling
+        run: dnf -y install copr-cli rpm-build rpmdevtools git
+
+      - uses: actions/checkout@v4
+
+      - name: Guard — COPR token present
+        env:
+          COPR_API_TOKEN: ${{ secrets.COPR_API_TOKEN }}
+        run: |
+          if [ -z "$COPR_API_TOKEN" ]; then
+            echo "::warning::COPR_API_TOKEN not set — skipping COPR upload."
+            echo "skip=1" >> "$GITHUB_ENV"
+          fi
+
+      - name: Build SRPM
+        if: env.skip != '1'
+        run: |
+          set -eux
+          V="${GITHUB_REF_NAME#v}"
+          git config --global --add safe.directory "$PWD"
+          rpmdev-setuptree
+          sed -i "s/^Version:.*/Version:        ${V}/" \
+            packaging/rpm/obs-open-spark.spec
+          git archive --format=tar.gz \
+            --prefix="obs-open-spark-${V}/" \
+            -o "$HOME/rpmbuild/SOURCES/obs-open-spark-${V}.tar.gz" HEAD
+          cp packaging/rpm/obs-open-spark.spec "$HOME/rpmbuild/SPECS/"
+          rpmbuild -bs "$HOME/rpmbuild/SPECS/obs-open-spark.spec"
+          echo "SRPM=$(ls "$HOME"/rpmbuild/SRPMS/*.src.rpm)" >> "$GITHUB_ENV"
+
+      - name: Submit to COPR
+        if: env.skip != '1'
+        env:
+          COPR_API_TOKEN: ${{ secrets.COPR_API_TOKEN }}
+        run: |
+          set -eu
+          mkdir -p ~/.config
+          printf '%s\n' "$COPR_API_TOKEN" > ~/.config/copr
+          copr-cli build --nowait "$COPR_TARGET" "$SRPM"

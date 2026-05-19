@@ -238,6 +238,7 @@ async def stream_agent(
             result.final_message = msg.get("content") or ""
             break
 
+        blocked = False
         for tc in tool_calls:
             fn = tc["function"]
             name = fn["name"]
@@ -250,9 +251,24 @@ async def stream_agent(
                     "reason": "dry_run: destructive tool needs confirmation",
                 }
                 step = AgentStep(name, args, payload, executed=False)
-                result.pending_confirmation.append(
-                    {"tool": name, "args": args}
-                )
+                # De-dup: the model loves to re-emit the same destructive
+                # call. Record it once.
+                entry = {"tool": name, "args": args}
+                if entry not in result.pending_confirmation:
+                    result.pending_confirmation.append(entry)
+                blocked = True
+                result.steps.append(step)
+                yield {
+                    "type": "step",
+                    "step": {
+                        "tool": step.tool, "args": step.args,
+                        "result": step.result, "executed": step.executed,
+                    },
+                }
+                # Don't feed skipped tool results back — that just makes
+                # the model retry the same call until the step budget is
+                # gone. Stop here and ask the user to confirm.
+                continue
             else:
                 payload = await tools.dispatch(name, args, state)
                 step = AgentStep(name, args, payload, executed=True)
@@ -281,6 +297,20 @@ async def stream_agent(
                     "content": _trim_result(payload),
                 }
             )
+
+        if blocked:
+            # One or more destructive actions were dry-run-blocked.
+            # Stop the loop and ask the user — re-querying the model
+            # only makes it spam the same call until the budget dies.
+            items = ", ".join(
+                f"{p['tool']}({', '.join(f'{k}={v}' for k, v in p['args'].items())})"
+                for p in result.pending_confirmation
+            )
+            result.final_message = (
+                f"These actions need confirmation: {items}. "
+                "Uncheck Dry-run and resend to apply them."
+            )
+            break
     else:
         result.final_message = (
             result.final_message

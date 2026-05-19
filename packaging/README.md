@@ -76,11 +76,10 @@ one) plus `plugin/com.obsproject.Studio.Plugin.OpenSpark.metainfo.xml`.
 
 1. Tag a release and push it: `git tag v0.1.0 && git push origin v0.1.0`.
 2. Resolve the tag commit: `git rev-list -n 1 v0.1.0`.
-3. Replace the `open-spark-app/open-spark` placeholder with the real
-   public repo owner in **both** the manifest (`url:`) and
-   `plugin/com.obsproject.Studio.Plugin.OpenSpark.metainfo.xml` (the
-   three `<url>` entries). In the manifest also set `commit:` to the
-   SHA from step 2. Confirm `runtime-version` matches current OBS:
+3. URLs already point at `github.com/Mundo-Dev0ps/open-spark` in the
+   manifest (`url:`) and the metainfo (three `<url>` entries) — change
+   them only if the repo moves. Set the manifest `commit:` to the SHA
+   from step 2. Confirm `runtime-version` matches current OBS:
    `flatpak info -m com.obsproject.Studio | grep runtime`.
 4. Validate locally:
    ```bash

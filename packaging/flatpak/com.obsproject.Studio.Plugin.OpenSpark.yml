@@ -34,7 +34,7 @@ modules:
       - -DCMAKE_INSTALL_PREFIX=/app/plugins/OpenSpark
     sources:
       - type: git
-        url: https://github.com/open-spark-app/open-spark.git
+        url: https://github.com/Mundo-Dev0ps/open-spark.git
         tag: v0.1.0
         # Flathub requires the exact commit the tag points at. Fill this
         # with `git rev-list -n 1 v0.1.0` before opening the PR.

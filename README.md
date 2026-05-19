@@ -59,7 +59,7 @@ install is never touched.
 ### 1. Get the code & configure
 
 ```bash
-git clone https://github.com/<your-org>/open-spark.git
+git clone https://github.com/Mundo-Dev0ps/open-spark.git
 cd open-spark
 cp .env.compose.example .env
 # edit .env: set ONE provider key + OPENSPARK_DEFAULT_MODEL

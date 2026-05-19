@@ -7,8 +7,6 @@ all writes become no-ops with a warning.
 
 from __future__ import annotations
 
-import logging
-
 import pytest
 
 from open_spark import secrets_store
@@ -66,27 +64,21 @@ def test_env_mode_has_llm_api_key_false_when_unset(env_mode: pytest.MonkeyPatch)
     assert secrets_store.has_llm_api_key("anthropic") is False
 
 
-def test_env_mode_set_persists_to_user_file(
-    env_mode: pytest.MonkeyPatch, tmp_app_dir
-) -> None:
+def test_env_mode_set_persists_to_user_file(env_mode: pytest.MonkeyPatch, tmp_app_dir) -> None:
     """Writes go to .data/user_secrets.json; reads pick them up."""
     secrets_store.set_obs_password("typed-by-user")
     # No env var, so reads must fall through to the user file.
     assert secrets_store.get_obs_password() == "typed-by-user"
 
 
-def test_env_mode_env_var_wins_over_user_file(
-    env_mode: pytest.MonkeyPatch, tmp_app_dir
-) -> None:
+def test_env_mode_env_var_wins_over_user_file(env_mode: pytest.MonkeyPatch, tmp_app_dir) -> None:
     """Env vars are authoritative — UI-typed keys never override docker compose."""
     secrets_store.set_llm_api_key("anthropic", "from-ui")
     env_mode.setenv("ANTHROPIC_API_KEY", "from-env")
     assert secrets_store.get_llm_api_key("anthropic") == "from-env"
 
 
-def test_env_mode_delete_clears_user_file(
-    env_mode: pytest.MonkeyPatch, tmp_app_dir
-) -> None:
+def test_env_mode_delete_clears_user_file(env_mode: pytest.MonkeyPatch, tmp_app_dir) -> None:
     secrets_store.set_llm_api_key("anthropic", "from-ui")
     assert secrets_store.get_llm_api_key("anthropic") == "from-ui"
     secrets_store.delete_llm_api_key("anthropic")

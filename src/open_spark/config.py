@@ -9,7 +9,6 @@ import os
 import sys
 from pathlib import Path
 
-from pydantic import Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 APP_NAME = "open-spark"

@@ -35,9 +35,7 @@ def test_slug_fallback(overlay_store: OverlayStore):
 def test_clear_removes_all(overlay_store: OverlayStore):
     paths = []
     for i in range(3):
-        ov = overlay_store.save(
-            prompt=f"x{i}", html="<!doctype html>", model="m"
-        )
+        ov = overlay_store.save(prompt=f"x{i}", html="<!doctype html>", model="m")
         paths.append(overlay_store.html_path(ov.id))
 
     assert len(overlay_store.list()) == 3

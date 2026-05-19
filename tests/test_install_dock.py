@@ -33,8 +33,7 @@ def test_install_idempotent(tmp_path: Path):
 def test_install_preserves_other_docks(tmp_path: Path):
     ini = tmp_path / "global.ini"
     ini.write_text(
-        "[BasicWindow]\n"
-        'ExtraBrowserDocks=[{"title": "Other", "url": "http://x", "uuid": ""}]\n',
+        '[BasicWindow]\nExtraBrowserDocks=[{"title": "Other", "url": "http://x", "uuid": ""}]\n',
         encoding="utf-8",
     )
     install(config_dir=tmp_path)

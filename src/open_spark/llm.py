@@ -180,8 +180,8 @@ STYLE_PREAMBLES: dict[str, str] = {
         "talent overlay).\n"
         "Palette: #ffd1ec pastel pink, #ff7ed4 magenta, #c89cff lilac, "
         "#9be8ff soft cyan, white highlights, #2a1334 deep purple base.\n"
-        "Typography: italic 800-weight sans-serif (e.g. \"Nunito\", "
-        "\"Quicksand\", system-ui) for headlines, 600 for body. Letter-"
+        'Typography: italic 800-weight sans-serif (e.g. "Nunito", '
+        '"Quicksand", system-ui) for headlines, 600 for body. Letter-'
         "spacing -0.02em for display. Add white text-stroke 2px on hot "
         "pink fills.\n"
         "Effects: glassmorphism cards (rgba bg + backdrop-filter blur "
@@ -196,8 +196,8 @@ STYLE_PREAMBLES: dict[str, str] = {
         "Visual style: PREMIUM cyberpunk / Edgerunners HUD.\n"
         "Palette: #00f0ff electric cyan, #ff2bd6 hot magenta, #fde400 "
         "warning yellow accents, #0a0014 deep base, scanlines #ffffff10.\n"
-        "Typography: monospace 700-900 uppercase (\"JetBrains Mono\", "
-        "\"Fira Code\", ui-monospace). Letter-spacing 0.18em. Headlines "
+        'Typography: monospace 700-900 uppercase ("JetBrains Mono", '
+        '"Fira Code", ui-monospace). Letter-spacing 0.18em. Headlines '
         "use `-webkit-text-stroke: 1px #00f0ff;` over a magenta fill.\n"
         "Effects: animated grid-floor in perspective with vanishing "
         "point. RGB chromatic aberration (3-layer text-shadow: -2px 0 "
@@ -211,8 +211,8 @@ STYLE_PREAMBLES: dict[str, str] = {
         "Visual style: PREMIUM editorial minimal (think Apple keynote).\n"
         "Palette: pure white #ffffff or jet #0a0a0a, ONE accent (e.g. "
         "#ff5500 or #00d4aa). Greys #707070, #b0b0b0.\n"
-        "Typography: light 200-300 weight sans (\"Inter\", \"Helvetica "
-        "Neue\", system-ui), tight tracking on display (-0.04em). Body "
+        'Typography: light 200-300 weight sans ("Inter", "Helvetica '
+        'Neue", system-ui), tight tracking on display (-0.04em). Body '
         "400, line-height 1.5.\n"
         "Effects: single hairline rule in accent color, thin geometric "
         "shapes (1-2px). Subtle tonal gradient on background (3-5% "
@@ -225,7 +225,7 @@ STYLE_PREAMBLES: dict[str, str] = {
         "Palette: sunset gradient #ff6e00 → #ff2bd6 → #6a00ff → #1a004a. "
         "Chrome accents #f0f0f0 to #888 vertical gradient.\n"
         "Typography: italic outlined display serif or geometric sans "
-        "(\"Bebas Neue\"-style fallback). Bold 800, italic, "
+        '("Bebas Neue"-style fallback). Bold 800, italic, '
         "`-webkit-text-stroke: 2px #fff` over a transparent fill creates "
         "the iconic outlined chrome.\n"
         "Effects: neon grid floor in perspective (#ff2bd6 → fade), "
@@ -255,9 +255,9 @@ STYLE_PREAMBLES: dict[str, str] = {
         "Visual style: PREMIUM TV newscast lower-third (CNN/BBC tier).\n"
         "Palette: deep navy #0a2240, broadcast red #c8102e, white "
         "#ffffff, gold accent #d4af37 on key bars.\n"
-        "Typography: bold serif headlines (\"Roboto Slab\", \"Merriweather\"-"
-        "style fallback) for the name, sans-serif 500 (\"Roboto\", "
-        "\"Inter\") for the subline. Tracking 0.02em.\n"
+        'Typography: bold serif headlines ("Roboto Slab", "Merriweather"-'
+        'style fallback) for the name, sans-serif 500 ("Roboto", '
+        '"Inter") for the subline. Tracking 0.02em.\n'
         "Effects: solid colored bars NO transparency (opaque chrome). "
         "Subtle vertical reflective gradient on bars (3% lighter at "
         "top). Thin gold key-line 2px above the lower-third. Animated "
@@ -425,8 +425,7 @@ async def generate_overlay(
     if base_url:
         kwargs["api_base"] = base_url
 
-    log.info("LLM call model=%s prompt_len=%d passes=%d",
-             model, len(prompt), quality_passes)
+    log.info("LLM call model=%s prompt_len=%d passes=%d", model, len(prompt), quality_passes)
     resp = await litellm.acompletion(**kwargs)
     html = _coerce_html(resp["choices"][0]["message"]["content"] or "")
 
@@ -440,10 +439,10 @@ async def generate_overlay(
             "model": model,
             "messages": [
                 {"role": "system", "content": SYSTEM_PROMPT_CRITIQUE},
-                {"role": "user", "content": (
-                    f"Brief: {user_prompt}\n\n"
-                    f"Candidate HTML:\n```html\n{html}\n```"
-                )},
+                {
+                    "role": "user",
+                    "content": (f"Brief: {user_prompt}\n\nCandidate HTML:\n```html\n{html}\n```"),
+                },
             ],
             "temperature": 0.6,
         }
@@ -451,9 +450,7 @@ async def generate_overlay(
             crit_kwargs["api_base"] = base_url
         try:
             cresp = await litellm.acompletion(**crit_kwargs)
-            html = _coerce_html(
-                cresp["choices"][0]["message"]["content"] or ""
-            )
+            html = _coerce_html(cresp["choices"][0]["message"]["content"] or "")
             cu = getattr(cresp, "usage", {}) or {}
             if hasattr(cu, "model_dump"):
                 cu = cu.model_dump()
@@ -506,22 +503,28 @@ async def refine_overlay(
         "model": model,
         "messages": [
             {"role": "system", "content": SYSTEM_PROMPT_REFINE},
-            {"role": "user",
-             "content": (
-                 "Existing overlay HTML:\n\n"
-                 "```html\n"
-                 f"{existing_html}\n"
-                 "```\n\n"
-                 f"Refinement request: {user_msg}"
-             )},
+            {
+                "role": "user",
+                "content": (
+                    "Existing overlay HTML:\n\n"
+                    "```html\n"
+                    f"{existing_html}\n"
+                    "```\n\n"
+                    f"Refinement request: {user_msg}"
+                ),
+            },
         ],
         "temperature": 0.5,  # tighter than fresh-generate; we're patching
     }
     if base_url:
         kwargs["api_base"] = base_url
 
-    log.info("LLM refine call model=%s instruction_len=%d existing_len=%d",
-             model, len(instruction), len(existing_html))
+    log.info(
+        "LLM refine call model=%s instruction_len=%d existing_len=%d",
+        model,
+        len(instruction),
+        len(existing_html),
+    )
     resp = await litellm.acompletion(**kwargs)
 
     raw = resp["choices"][0]["message"]["content"] or ""
@@ -600,7 +603,7 @@ def _validate_layout(data: dict, *, default_canvas: tuple[int, int]) -> SceneLay
         if not isinstance(item, dict):
             raise ValueError(f"source #{i} is not a JSON object")
         role = str(item.get("role") or "ornament").strip() or "ornament"
-        name = str(item.get("name") or f"{role}-{i+1}").strip() or f"{role}-{i+1}"
+        name = str(item.get("name") or f"{role}-{i + 1}").strip() or f"{role}-{i + 1}"
         html = item.get("html")
         if not isinstance(html, str) or "<" not in html:
             raise ValueError(f"source #{i} ({name}) has no usable html")
@@ -634,6 +637,7 @@ def _validate_layout(data: dict, *, default_canvas: tuple[int, int]) -> SceneLay
 
 
 # --- Overlap resolution ----------------------------------------------------
+
 
 def _rects_overlap(a: dict, b: dict) -> bool:
     """True if two transform rects share any pixel."""
@@ -673,8 +677,7 @@ def _resolve_overlaps(
         t = _clamp_rect(s.transform, canvas)
         attempts = 0
         while attempts < 200 and any(
-            other.role != "background" and _rects_overlap(t, other.transform)
-            for other in placed
+            other.role != "background" and _rects_overlap(t, other.transform) for other in placed
         ):
             # Try moving down by 1 row first; if past canvas, snap to next
             # column to the right and reset y.
@@ -685,15 +688,11 @@ def _resolve_overlaps(
                 t["x"] = t["x"] + max(1, cw // 12)
                 if t["x"] + t["width"] > cw:
                     # Out of canvas — accept the overlap and stop.
-                    log.warning(
-                        "overlap resolver gave up on source %s; placing as-is", s.name
-                    )
+                    log.warning("overlap resolver gave up on source %s; placing as-is", s.name)
                     break
             t = _clamp_rect(t, canvas)
             attempts += 1
-        placed.append(
-            SceneSourceLayout(role=s.role, name=s.name, html=s.html, transform=t)
-        )
+        placed.append(SceneSourceLayout(role=s.role, name=s.name, html=s.html, transform=t))
     return placed
 
 
@@ -716,10 +715,7 @@ async def generate_scene_layout(
     _ensure_api_key_env(model)
 
     body = _apply_style(prompt, style)
-    user_prompt = (
-        f"Canvas: {canvas_width}x{canvas_height}.\n\n"
-        f"{body}"
-    )
+    user_prompt = f"Canvas: {canvas_width}x{canvas_height}.\n\n{body}"
     kwargs: dict = {
         "model": model,
         "messages": [

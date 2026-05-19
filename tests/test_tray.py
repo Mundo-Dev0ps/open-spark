@@ -10,8 +10,8 @@ from __future__ import annotations
 import http.server
 import socket
 import threading
+from collections.abc import Iterator
 from contextlib import closing
-from typing import Iterator
 
 import pytest
 

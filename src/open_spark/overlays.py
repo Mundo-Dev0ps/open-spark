@@ -6,7 +6,7 @@ import json
 import re
 import uuid
 from dataclasses import asdict, dataclass, field
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 
 from .config import overlays_dir
@@ -75,7 +75,7 @@ class OverlayStore:
             slug=_slug(title or prompt),
             prompt=prompt,
             model=model,
-            created_at=datetime.now(timezone.utc).isoformat(),
+            created_at=datetime.now(UTC).isoformat(),
             width=width,
             height=height,
             title=title or prompt[:80],

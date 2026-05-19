@@ -23,8 +23,9 @@ from __future__ import annotations
 
 import logging
 import sys
+from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, Any, Awaitable, Callable
+from typing import TYPE_CHECKING, Any
 
 from . import llm
 
@@ -86,7 +87,7 @@ def get_tool(name: str) -> Tool | None:
     return _REGISTRY.get(name)
 
 
-async def dispatch(name: str, args: dict, state: "AppState") -> dict:
+async def dispatch(name: str, args: dict, state: AppState) -> dict:
     t = _REGISTRY.get(name)
     if t is None:
         return {"error": f"unknown tool {name!r}"}
@@ -101,7 +102,8 @@ async def dispatch(name: str, args: dict, state: "AppState") -> dict:
 
 # --- shared helpers ---------------------------------------------------------
 
-def _model_and_base(state: "AppState") -> tuple[str, str | None]:
+
+def _model_and_base(state: AppState) -> tuple[str, str | None]:
     from .api.routes import _user_config
 
     cfg = _user_config()
@@ -122,6 +124,7 @@ def _camera_input_kind() -> str:
 # Phase 1 — overlays / scenes (reuse existing pipeline)
 # ===========================================================================
 
+
 @tool(
     "generate_overlay",
     "Generate a single self-contained HTML overlay from a description "
@@ -131,7 +134,13 @@ def _camera_input_kind() -> str:
         "type": "object",
         "properties": {
             "prompt": {"type": "string", "description": "What the overlay should look/do."},
-            "style": {"type": "string", "description": "Optional style preset key (anime_kawaii, cyberpunk, retro_80s, glitch, newscast, minimal)."},
+            "style": {
+                "type": "string",
+                "description": (
+                    "Optional style preset key (anime_kawaii, cyberpunk, "
+                    "retro_80s, glitch, newscast, minimal)."
+                ),
+            },
             "width": {"type": "integer", "default": 1920},
             "height": {"type": "integer", "default": 1080},
         },
@@ -140,12 +149,14 @@ def _camera_input_kind() -> str:
 )
 async def _t_generate_overlay(state, prompt, style=None, width=1920, height=1080):
     model, base = _model_and_base(state)
-    result = await llm.generate_overlay(
-        prompt, model=model, base_url=base, style=style
-    )
+    result = await llm.generate_overlay(prompt, model=model, base_url=base, style=style)
     ov = state.overlays.save(
-        prompt=prompt, html=result.html, model=result.model,
-        title=prompt[:80], width=width, height=height,
+        prompt=prompt,
+        html=result.html,
+        model=result.model,
+        title=prompt[:80],
+        width=width,
+        height=height,
     )
     return {
         "overlay_id": ov.id,
@@ -171,24 +182,27 @@ async def _t_generate_overlay(state, prompt, style=None, width=1920, height=1080
 )
 async def _t_generate_scene(state, prompt, style=None, scene_name=None, replace=False):
     model, base = _model_and_base(state)
-    layout = await llm.generate_scene_layout(
-        prompt, model=model, base_url=base, style=style
-    )
+    layout = await llm.generate_scene_layout(prompt, model=model, base_url=base, style=style)
     base_url = state.settings.overlay_base_url
     prefix = state.settings.obs_source_prefix
     obs_sources = []
     for s in layout.sources:
         ov = state.overlays.save(
             prompt=f"[scene:{layout.scene_name}] {s.role}",
-            html=s.html, model=layout.model, title=s.name,
-            width=s.transform["width"], height=s.transform["height"],
+            html=s.html,
+            model=layout.model,
+            title=s.name,
+            width=s.transform["width"],
+            height=s.transform["height"],
         )
-        obs_sources.append({
-            "name": f"{prefix}-{ov.id}-{s.name}"[:140],
-            "url": f"{base_url}/{ov.id}.html",
-            "role": s.role,
-            "transform": dict(s.transform),
-        })
+        obs_sources.append(
+            {
+                "name": f"{prefix}-{ov.id}-{s.name}"[:140],
+                "url": f"{base_url}/{ov.id}.html",
+                "role": s.role,
+                "transform": dict(s.transform),
+            }
+        )
     if not await state.obs.is_connected():
         return {"error": "OBS not connected"}
     target = scene_name or layout.scene_name
@@ -219,8 +233,7 @@ async def _t_inject_overlay(state, overlay_id, scene=None):
         return {"error": "OBS not connected"}
     url = f"{state.settings.overlay_base_url}/{ov.id}.html"
     name = f"{state.settings.obs_source_prefix}-{ov.slug}"
-    target = scene or await state.obs.current_scene_name() \
-        or state.settings.obs_scene_name
+    target = scene or await state.obs.current_scene_name() or state.settings.obs_scene_name
     info = await state.obs.upsert_browser_source(
         name=name, url=url, width=ov.width, height=ov.height, scene=target
     )
@@ -233,10 +246,11 @@ async def _t_inject_overlay(state, overlay_id, scene=None):
     {"type": "object", "properties": {}},
 )
 async def _t_list_overlays(state):
-    return {"overlays": [
-        {"id": o.id, "title": o.title, "model": o.model}
-        for o in state.overlays.list()
-    ]}
+    return {
+        "overlays": [
+            {"id": o.id, "title": o.title, "model": o.model} for o in state.overlays.list()
+        ]
+    }
 
 
 @tool(
@@ -258,6 +272,7 @@ async def _t_delete_overlay(state, overlay_id):
 # Phase 2 — OBS primitives
 # ===========================================================================
 
+
 @tool(
     "list_scenes",
     "List every scene in OBS plus which one is currently active.",
@@ -266,8 +281,7 @@ async def _t_delete_overlay(state, overlay_id):
 async def _t_list_scenes(state):
     r = await state.obs.raw_request("GetSceneList")
     scenes = [s.get("sceneName") for s in r.get("scenes", [])]
-    return {"scenes": scenes,
-            "current": r.get("currentProgramSceneName")}
+    return {"scenes": scenes, "current": r.get("currentProgramSceneName")}
 
 
 @tool(
@@ -280,9 +294,7 @@ async def _t_list_scenes(state):
     },
 )
 async def _t_switch_scene(state, scene):
-    await state.obs.raw_request(
-        "SetCurrentProgramScene", {"sceneName": scene}
-    )
+    await state.obs.raw_request("SetCurrentProgramScene", {"sceneName": scene})
     return {"current": scene}
 
 
@@ -307,16 +319,12 @@ async def _t_delete_scene(state, scene):
         names = [s.get("sceneName") for s in sl.get("scenes", [])]
         current = sl.get("currentProgramSceneName")
         if scene not in names:
-            return {"error": f"scene {scene!r} not found",
-                    "available": names}
+            return {"error": f"scene {scene!r} not found", "available": names}
         others = [n for n in names if n != scene]
         if not others:
-            return {"error": "OBS must keep at least one scene; "
-                             "cannot delete the only scene"}
+            return {"error": "OBS must keep at least one scene; cannot delete the only scene"}
         if current == scene:
-            await state.obs.raw_request(
-                "SetCurrentProgramScene", {"sceneName": others[0]}
-            )
+            await state.obs.raw_request("SetCurrentProgramScene", {"sceneName": others[0]})
     except Exception:  # noqa: BLE001 — best-effort guard
         pass
     await state.obs.raw_request("RemoveScene", {"sceneName": scene})
@@ -333,13 +341,13 @@ async def _t_delete_scene(state, scene):
     },
 )
 async def _t_list_scene_items(state, scene):
-    r = await state.obs.raw_request(
-        "GetSceneItemList", {"sceneName": scene}
-    )
-    return {"items": [
-        {"id": it.get("sceneItemId"), "source": it.get("sourceName")}
-        for it in r.get("sceneItems", [])
-    ]}
+    r = await state.obs.raw_request("GetSceneItemList", {"sceneName": scene})
+    return {
+        "items": [
+            {"id": it.get("sceneItemId"), "source": it.get("sourceName")}
+            for it in r.get("sceneItems", [])
+        ]
+    }
 
 
 @tool(
@@ -350,8 +358,7 @@ async def _t_list_scene_items(state, scene):
 )
 async def _t_list_input_kinds(state):
     r = await state.obs.raw_request("GetInputKindList")
-    return {"input_kinds": r.get("inputKinds", []),
-            "camera_kind": _camera_input_kind()}
+    return {"input_kinds": r.get("inputKinds", []), "camera_kind": _camera_input_kind()}
 
 
 @tool(
@@ -362,7 +369,12 @@ async def _t_list_input_kinds(state):
         "properties": {
             "scene": {"type": "string"},
             "name": {"type": "string", "default": "Webcam"},
-            "device": {"type": "string", "description": "Device path/id, e.g. /dev/video0. Optional — OBS picks the first if omitted."},
+            "device": {
+                "type": "string",
+                "description": (
+                    "Device path/id, e.g. /dev/video0. Optional — OBS picks the first if omitted."
+                ),
+            },
         },
         "required": ["scene"],
     },
@@ -372,15 +384,17 @@ async def _t_add_camera(state, scene, name="Webcam", device=None):
     settings: dict[str, Any] = {}
     if device:
         settings["device_id"] = device
-    r = await state.obs.raw_request("CreateInput", {
-        "sceneName": scene,
-        "inputName": name,
-        "inputKind": kind,
-        "inputSettings": settings,
-        "sceneItemEnabled": True,
-    })
-    return {"added": name, "kind": kind,
-            "scene_item_id": r.get("sceneItemId")}
+    r = await state.obs.raw_request(
+        "CreateInput",
+        {
+            "sceneName": scene,
+            "inputName": name,
+            "inputKind": kind,
+            "inputSettings": settings,
+            "sceneItemEnabled": True,
+        },
+    )
+    return {"added": name, "kind": kind, "scene_item_id": r.get("sceneItemId")}
 
 
 @tool(
@@ -397,13 +411,16 @@ async def _t_add_camera(state, scene, name="Webcam", device=None):
     },
 )
 async def _t_add_text(state, scene, text, name="Text"):
-    r = await state.obs.raw_request("CreateInput", {
-        "sceneName": scene,
-        "inputName": name,
-        "inputKind": "text_ft2_source_v2",
-        "inputSettings": {"text": text},
-        "sceneItemEnabled": True,
-    })
+    r = await state.obs.raw_request(
+        "CreateInput",
+        {
+            "sceneName": scene,
+            "inputName": name,
+            "inputKind": "text_ft2_source_v2",
+            "inputSettings": {"text": text},
+            "sceneItemEnabled": True,
+        },
+    )
     return {"added": name, "scene_item_id": r.get("sceneItemId")}
 
 
@@ -422,18 +439,22 @@ async def _t_add_text(state, scene, text, name="Text"):
         "required": ["scene"],
     },
 )
-async def _t_add_color(state, scene, name="Background",
-                       color_hex="#000000", width=1920, height=1080):
+async def _t_add_color(
+    state, scene, name="Background", color_hex="#000000", width=1920, height=1080
+):
     h = color_hex.lstrip("#")
-    r, g, b = (int(h[i:i + 2], 16) for i in (0, 2, 4))
+    r, g, b = (int(h[i : i + 2], 16) for i in (0, 2, 4))
     abgr = (0xFF << 24) | (b << 16) | (g << 8) | r  # OBS uint32 ABGR
-    resp = await state.obs.raw_request("CreateInput", {
-        "sceneName": scene,
-        "inputName": name,
-        "inputKind": "color_source_v3",
-        "inputSettings": {"color": abgr, "width": width, "height": height},
-        "sceneItemEnabled": True,
-    })
+    resp = await state.obs.raw_request(
+        "CreateInput",
+        {
+            "sceneName": scene,
+            "inputName": name,
+            "inputKind": "color_source_v3",
+            "inputSettings": {"color": abgr, "width": width, "height": height},
+            "sceneItemEnabled": True,
+        },
+    )
     return {"added": name, "scene_item_id": resp.get("sceneItemId")}
 
 
@@ -453,8 +474,7 @@ async def _t_add_color(state, scene, name="Background",
         "required": ["scene", "scene_item_id"],
     },
 )
-async def _t_set_transform(state, scene, scene_item_id,
-                           x=None, y=None, scale=None, rotation=None):
+async def _t_set_transform(state, scene, scene_item_id, x=None, y=None, scale=None, rotation=None):
     t: dict[str, Any] = {}
     if x is not None:
         t["positionX"] = float(x)
@@ -465,11 +485,14 @@ async def _t_set_transform(state, scene, scene_item_id,
         t["scaleY"] = float(scale)
     if rotation is not None:
         t["rotation"] = float(rotation)
-    await state.obs.raw_request("SetSceneItemTransform", {
-        "sceneName": scene,
-        "sceneItemId": int(scene_item_id),
-        "sceneItemTransform": t,
-    })
+    await state.obs.raw_request(
+        "SetSceneItemTransform",
+        {
+            "sceneName": scene,
+            "sceneItemId": int(scene_item_id),
+            "sceneItemTransform": t,
+        },
+    )
     return {"ok": True, "applied": t}
 
 
@@ -487,17 +510,21 @@ async def _t_set_transform(state, scene, scene_item_id,
     },
 )
 async def _t_set_visibility(state, scene, scene_item_id, visible):
-    await state.obs.raw_request("SetSceneItemEnabled", {
-        "sceneName": scene,
-        "sceneItemId": int(scene_item_id),
-        "sceneItemEnabled": bool(visible),
-    })
+    await state.obs.raw_request(
+        "SetSceneItemEnabled",
+        {
+            "sceneName": scene,
+            "sceneItemId": int(scene_item_id),
+            "sceneItemEnabled": bool(visible),
+        },
+    )
     return {"ok": True, "visible": bool(visible)}
 
 
 # ===========================================================================
 # Phase 3 — filters (camera / source polish)
 # ===========================================================================
+
 
 @tool(
     "list_filters",
@@ -509,9 +536,7 @@ async def _t_set_visibility(state, scene, scene_item_id, visible):
     },
 )
 async def _t_list_filters(state, source):
-    r = await state.obs.raw_request(
-        "GetSourceFilterList", {"sourceName": source}
-    )
+    r = await state.obs.raw_request("GetSourceFilterList", {"sourceName": source})
     return {"filters": r.get("filters", [])}
 
 
@@ -522,23 +547,29 @@ async def _t_list_filters(state, source):
         "type": "object",
         "properties": {
             "source": {"type": "string"},
-            "key_color": {"type": "string", "enum": ["green", "blue", "magenta"], "default": "green"},
+            "key_color": {
+                "type": "string",
+                "enum": ["green", "blue", "magenta"],
+                "default": "green",
+            },
             "similarity": {"type": "integer", "default": 400},
         },
         "required": ["source"],
     },
 )
 async def _t_chroma(state, source, key_color="green", similarity=400):
-    color_map = {"green": 0x00FF00, "blue": 0xFF0000, "magenta": 0xFF00FF}
-    await state.obs.raw_request("CreateSourceFilter", {
-        "sourceName": source,
-        "filterName": "Chroma Key",
-        "filterKind": "chroma_key_filter_v2",
-        "filterSettings": {
-            "key_color_type": key_color,
-            "similarity": similarity,
+    await state.obs.raw_request(
+        "CreateSourceFilter",
+        {
+            "sourceName": source,
+            "filterName": "Chroma Key",
+            "filterKind": "chroma_key_filter_v2",
+            "filterSettings": {
+                "key_color_type": key_color,
+                "similarity": similarity,
+            },
         },
-    })
+    )
     return {"ok": True, "filter": "Chroma Key"}
 
 
@@ -557,19 +588,23 @@ async def _t_chroma(state, source, key_color="green", similarity=400):
         "required": ["source"],
     },
 )
-async def _t_color_correct(state, source, brightness=0.0, contrast=0.0,
-                           saturation=0.0, hue_shift=0.0):
-    await state.obs.raw_request("CreateSourceFilter", {
-        "sourceName": source,
-        "filterName": "Color Correction",
-        "filterKind": "color_filter_v2",
-        "filterSettings": {
-            "brightness": brightness,
-            "contrast": contrast,
-            "saturation": saturation,
-            "hue_shift": hue_shift,
+async def _t_color_correct(
+    state, source, brightness=0.0, contrast=0.0, saturation=0.0, hue_shift=0.0
+):
+    await state.obs.raw_request(
+        "CreateSourceFilter",
+        {
+            "sourceName": source,
+            "filterName": "Color Correction",
+            "filterKind": "color_filter_v2",
+            "filterSettings": {
+                "brightness": brightness,
+                "contrast": contrast,
+                "saturation": saturation,
+                "hue_shift": hue_shift,
+            },
         },
-    })
+    )
     return {"ok": True, "filter": "Color Correction"}
 
 
@@ -588,22 +623,26 @@ async def _t_color_correct(state, source, brightness=0.0, contrast=0.0,
         "required": ["source"],
     },
 )
-async def _t_rounded_border(state, source, radius=20,
-                            border_color="#ff00ff", border_width=4):
+async def _t_rounded_border(state, source, radius=20, border_color="#ff00ff", border_width=4):
     # OBS has no native rounded-corner filter; the standard trick is the
     # "Render Delay"+mask combo, but the practical/portable route is a
     # crop+mask via the user-installed StreamFX or a CSS overlay. We
     # fall back to documenting the intent and applying a crop_filter so
     # the source at least gets clean edges.
-    await state.obs.raw_request("CreateSourceFilter", {
-        "sourceName": source,
-        "filterName": "Edge Crop",
-        "filterKind": "crop_filter",
-        "filterSettings": {
-            "left": border_width, "right": border_width,
-            "top": border_width, "bottom": border_width,
+    await state.obs.raw_request(
+        "CreateSourceFilter",
+        {
+            "sourceName": source,
+            "filterName": "Edge Crop",
+            "filterKind": "crop_filter",
+            "filterSettings": {
+                "left": border_width,
+                "right": border_width,
+                "top": border_width,
+                "bottom": border_width,
+            },
         },
-    })
+    )
     return {
         "ok": True,
         "note": (
@@ -629,12 +668,15 @@ async def _t_rounded_border(state, source, radius=20,
     },
 )
 async def _t_sharpen(state, source, amount=0.5):
-    await state.obs.raw_request("CreateSourceFilter", {
-        "sourceName": source,
-        "filterName": "Sharpen",
-        "filterKind": "sharpness_filter_v2",
-        "filterSettings": {"sharpness": amount},
-    })
+    await state.obs.raw_request(
+        "CreateSourceFilter",
+        {
+            "sourceName": source,
+            "filterName": "Sharpen",
+            "filterKind": "sharpness_filter_v2",
+            "filterSettings": {"sharpness": amount},
+        },
+    )
     return {"ok": True, "filter": "Sharpen"}
 
 
@@ -651,12 +693,15 @@ async def _t_sharpen(state, source, amount=0.5):
     },
 )
 async def _t_lut(state, source, amount=1.0):
-    await state.obs.raw_request("CreateSourceFilter", {
-        "sourceName": source,
-        "filterName": "Color Grade",
-        "filterKind": "color_grade_filter",
-        "filterSettings": {"opacity": amount},
-    })
+    await state.obs.raw_request(
+        "CreateSourceFilter",
+        {
+            "sourceName": source,
+            "filterName": "Color Grade",
+            "filterKind": "color_grade_filter",
+            "filterSettings": {"opacity": amount},
+        },
+    )
     return {"ok": True, "filter": "Color Grade"}
 
 
@@ -674,10 +719,13 @@ async def _t_lut(state, source, amount=1.0):
     destructive=True,
 )
 async def _t_remove_filter(state, source, filter_name):
-    await state.obs.raw_request("RemoveSourceFilter", {
-        "sourceName": source,
-        "filterName": filter_name,
-    })
+    await state.obs.raw_request(
+        "RemoveSourceFilter",
+        {
+            "sourceName": source,
+            "filterName": filter_name,
+        },
+    )
     return {"ok": True, "removed": filter_name}
 
 
@@ -685,10 +733,10 @@ async def _t_remove_filter(state, source, filter_name):
 # Phase 4 — audio
 # ===========================================================================
 
+
 @tool(
     "set_volume",
-    "Set an audio source's volume in dB (0 = unity, negative = quieter, "
-    "e.g. -6).",
+    "Set an audio source's volume in dB (0 = unity, negative = quieter, e.g. -6).",
     {
         "type": "object",
         "properties": {
@@ -699,10 +747,13 @@ async def _t_remove_filter(state, source, filter_name):
     },
 )
 async def _t_set_volume(state, source, db):
-    await state.obs.raw_request("SetInputVolume", {
-        "inputName": source,
-        "inputVolumeDb": float(db),
-    })
+    await state.obs.raw_request(
+        "SetInputVolume",
+        {
+            "inputName": source,
+            "inputVolumeDb": float(db),
+        },
+    )
     return {"ok": True, "source": source, "db": db}
 
 
@@ -719,10 +770,13 @@ async def _t_set_volume(state, source, db):
     },
 )
 async def _t_set_mute(state, source, muted):
-    await state.obs.raw_request("SetInputMute", {
-        "inputName": source,
-        "inputMuted": bool(muted),
-    })
+    await state.obs.raw_request(
+        "SetInputMute",
+        {
+            "inputName": source,
+            "inputMuted": bool(muted),
+        },
+    )
     return {"ok": True, "source": source, "muted": bool(muted)}
 
 
@@ -746,20 +800,22 @@ async def _t_add_audio_input(state, scene, name="Mic", kind="mic"):
         ik = "coreaudio_input_capture" if kind == "mic" else "coreaudio_output_capture"
     else:
         ik = "pulse_input_capture" if kind == "mic" else "pulse_output_capture"
-    r = await state.obs.raw_request("CreateInput", {
-        "sceneName": scene,
-        "inputName": name,
-        "inputKind": ik,
-        "inputSettings": {},
-        "sceneItemEnabled": True,
-    })
+    r = await state.obs.raw_request(
+        "CreateInput",
+        {
+            "sceneName": scene,
+            "inputName": name,
+            "inputKind": ik,
+            "inputSettings": {},
+            "sceneItemEnabled": True,
+        },
+    )
     return {"added": name, "kind": ik, "scene_item_id": r.get("sceneItemId")}
 
 
 @tool(
     "add_audio_filter",
-    "Add an audio filter to a source: noise suppression, gain, or "
-    "compressor.",
+    "Add an audio filter to a source: noise suppression, gain, or compressor.",
     {
         "type": "object",
         "properties": {
@@ -772,26 +828,29 @@ async def _t_add_audio_input(state, scene, name="Mic", kind="mic"):
 )
 async def _t_add_audio_filter(state, source, filter, gain_db=0.0):
     kinds = {
-        "noise_suppress": ("Noise Suppression", "noise_suppress_filter_v2",
-                           {"method": "rnnoise"}),
+        "noise_suppress": ("Noise Suppression", "noise_suppress_filter_v2", {"method": "rnnoise"}),
         "gain": ("Gain", "gain_filter", {"db": float(gain_db)}),
         "compressor": ("Compressor", "compressor_filter", {}),
     }
     if filter not in kinds:
         return {"error": f"unknown audio filter {filter!r}"}
     fname, fkind, fset = kinds[filter]
-    await state.obs.raw_request("CreateSourceFilter", {
-        "sourceName": source,
-        "filterName": fname,
-        "filterKind": fkind,
-        "filterSettings": fset,
-    })
+    await state.obs.raw_request(
+        "CreateSourceFilter",
+        {
+            "sourceName": source,
+            "filterName": fname,
+            "filterKind": fkind,
+            "filterSettings": fset,
+        },
+    )
     return {"ok": True, "filter": fname}
 
 
 # ===========================================================================
 # Phase 5 — recording / streaming lifecycle
 # ===========================================================================
+
 
 @tool(
     "recording_control",
@@ -805,8 +864,7 @@ async def _t_add_audio_filter(state, source, filter, gain_db=0.0):
     },
 )
 async def _t_recording(state, action):
-    req = {"start": "StartRecord", "stop": "StopRecord",
-           "toggle": "ToggleRecord"}[action]
+    req = {"start": "StartRecord", "stop": "StopRecord", "toggle": "ToggleRecord"}[action]
     r = await state.obs.raw_request(req)
     return {"ok": True, "action": action, "result": r}
 
@@ -824,8 +882,7 @@ async def _t_recording(state, action):
     destructive=True,
 )
 async def _t_streaming(state, action):
-    req = {"start": "StartStream", "stop": "StopStream",
-           "toggle": "ToggleStream"}[action]
+    req = {"start": "StartStream", "stop": "StopStream", "toggle": "ToggleStream"}[action]
     r = await state.obs.raw_request(req)
     return {"ok": True, "action": action, "result": r}
 
@@ -842,8 +899,9 @@ async def _t_streaming(state, action):
     },
 )
 async def _t_vcam(state, action):
-    req = {"start": "StartVirtualCam", "stop": "StopVirtualCam",
-           "toggle": "ToggleVirtualCam"}[action]
+    req = {"start": "StartVirtualCam", "stop": "StopVirtualCam", "toggle": "ToggleVirtualCam"}[
+        action
+    ]
     r = await state.obs.raw_request(req)
     return {"ok": True, "action": action, "result": r}
 
@@ -853,9 +911,15 @@ async def _t_vcam(state, action):
 # ===========================================================================
 
 _ANCHORS = {
-    "top-left", "top-center", "top-right",
-    "center-left", "center", "center-right",
-    "bottom-left", "bottom-center", "bottom-right",
+    "top-left",
+    "top-center",
+    "top-right",
+    "center-left",
+    "center",
+    "center-right",
+    "bottom-left",
+    "bottom-center",
+    "bottom-right",
     "fill",
 }
 
@@ -874,7 +938,11 @@ _ANCHORS = {
                 "type": "string",
                 "enum": sorted(_ANCHORS),
             },
-            "width": {"type": "integer", "description": "item width px (not needed for fill)", "default": 480},
+            "width": {
+                "type": "integer",
+                "description": "item width px (not needed for fill)",
+                "default": 480,
+            },
             "height": {"type": "integer", "default": 270},
             "margin": {"type": "integer", "default": 40},
             "canvas_w": {"type": "integer", "default": 1920},
@@ -883,17 +951,26 @@ _ANCHORS = {
         "required": ["scene", "scene_item_id", "anchor"],
     },
 )
-async def _t_place_source(state, scene, scene_item_id, anchor,
-                          width=480, height=270, margin=40,
-                          canvas_w=1920, canvas_h=1080):
+async def _t_place_source(
+    state,
+    scene,
+    scene_item_id,
+    anchor,
+    width=480,
+    height=270,
+    margin=40,
+    canvas_w=1920,
+    canvas_h=1080,
+):
     if anchor not in _ANCHORS:
-        return {"error": f"unknown anchor {anchor!r}",
-                "valid": sorted(_ANCHORS)}
+        return {"error": f"unknown anchor {anchor!r}", "valid": sorted(_ANCHORS)}
     if anchor == "fill":
         t = {
-            "positionX": 0.0, "positionY": 0.0,
+            "positionX": 0.0,
+            "positionY": 0.0,
             "boundsType": "OBS_BOUNDS_STRETCH",
-            "boundsWidth": float(canvas_w), "boundsHeight": float(canvas_h),
+            "boundsWidth": float(canvas_w),
+            "boundsHeight": float(canvas_h),
             "alignment": 5,
         }
     else:
@@ -913,22 +990,28 @@ async def _t_place_source(state, scene, scene_item_id, anchor,
         else:
             y = (canvas_h - height) // 2
         t = {
-            "positionX": float(x), "positionY": float(y),
+            "positionX": float(x),
+            "positionY": float(y),
             "boundsType": "OBS_BOUNDS_STRETCH",
-            "boundsWidth": float(width), "boundsHeight": float(height),
+            "boundsWidth": float(width),
+            "boundsHeight": float(height),
             "alignment": 5,
         }
-    await state.obs.raw_request("SetSceneItemTransform", {
-        "sceneName": scene,
-        "sceneItemId": int(scene_item_id),
-        "sceneItemTransform": t,
-    })
+    await state.obs.raw_request(
+        "SetSceneItemTransform",
+        {
+            "sceneName": scene,
+            "sceneItemId": int(scene_item_id),
+            "sceneItemTransform": t,
+        },
+    )
     return {"ok": True, "anchor": anchor, "transform": t}
 
 
 # ===========================================================================
 # Phase 7 — vision feedback (screenshot)
 # ===========================================================================
+
 
 @tool(
     "screenshot_program",
@@ -948,16 +1031,18 @@ async def _t_screenshot(state, width=1280, height=720):
     import uuid
 
     scene = await state.obs.current_scene_name() or ""
-    r = await state.obs.raw_request("GetSourceScreenshot", {
-        "sourceName": scene,
-        "imageFormat": "png",
-        "imageWidth": int(width),
-        "imageHeight": int(height),
-    })
+    r = await state.obs.raw_request(
+        "GetSourceScreenshot",
+        {
+            "sourceName": scene,
+            "imageFormat": "png",
+            "imageWidth": int(width),
+            "imageHeight": int(height),
+        },
+    )
     data = r.get("imageData", "")
     if not data:
-        return {"error": "no image data (OBS may not support screenshot "
-                         "for this source)"}
+        return {"error": "no image data (OBS may not support screenshot for this source)"}
     # imageData is "data:image/png;base64,...." — strip the prefix.
     b64 = data.split(",", 1)[-1]
     try:
@@ -978,6 +1063,7 @@ async def _t_screenshot(state, width=1280, height=720):
 # ===========================================================================
 # Phase 8 — scene presets
 # ===========================================================================
+
 
 def _presets_path(state):
     from .config import app_data_dir
@@ -1007,8 +1093,7 @@ def _save_presets(state, d: dict) -> None:
 
 @tool(
     "save_scene_preset",
-    "Snapshot a scene's current source list under a preset name so it "
-    "can be recalled later.",
+    "Snapshot a scene's current source list under a preset name so it can be recalled later.",
     {
         "type": "object",
         "properties": {
@@ -1019,9 +1104,7 @@ def _save_presets(state, d: dict) -> None:
     },
 )
 async def _t_save_preset(state, scene, preset_name):
-    r = await state.obs.raw_request(
-        "GetSceneItemList", {"sceneName": scene}
-    )
+    r = await state.obs.raw_request("GetSceneItemList", {"sceneName": scene})
     items = [
         {"source": it.get("sourceName"), "id": it.get("sceneItemId")}
         for it in r.get("sceneItems", [])
@@ -1039,16 +1122,18 @@ async def _t_save_preset(state, scene, preset_name):
 )
 async def _t_list_presets(state):
     d = _load_presets(state)
-    return {"presets": [
-        {"name": k, "scene": v.get("scene"),
-         "items": len(v.get("items", []))}
-        for k, v in d.items()
-    ]}
+    return {
+        "presets": [
+            {"name": k, "scene": v.get("scene"), "items": len(v.get("items", []))}
+            for k, v in d.items()
+        ]
+    }
 
 
 # ===========================================================================
 # Phase 9 — hotkeys
 # ===========================================================================
+
 
 @tool(
     "trigger_hotkey",
@@ -1061,7 +1146,5 @@ async def _t_list_presets(state):
     },
 )
 async def _t_trigger_hotkey(state, hotkey_name):
-    await state.obs.raw_request(
-        "TriggerHotkeyByName", {"hotkeyName": hotkey_name}
-    )
+    await state.obs.raw_request("TriggerHotkeyByName", {"hotkeyName": hotkey_name})
     return {"ok": True, "triggered": hotkey_name}

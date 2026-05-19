@@ -7,7 +7,7 @@ import logging
 import os
 import time
 import uuid
-from contextlib import asynccontextmanager
+from contextlib import asynccontextmanager, suppress
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -62,9 +62,9 @@ def _setup_logging(level: str) -> None:
     if os.environ.get("OPENSPARK_LOG_JSON", "1").lower() in {"1", "true", "yes"}:
         handler.setFormatter(_JsonLogFormatter())
     else:
-        handler.setFormatter(logging.Formatter(
-            "%(asctime)s %(levelname)-7s %(name)s :: %(message)s"
-        ))
+        handler.setFormatter(
+            logging.Formatter("%(asctime)s %(levelname)-7s %(name)s :: %(message)s")
+        )
     root.addHandler(handler)
 
 
@@ -90,10 +90,8 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             log.warning("OBS connect failed at startup (%s). UI will reflect this.", e)
         app.state.spark = state
         yield
-        try:
+        with suppress(Exception):
             await obs.disconnect()
-        except Exception:
-            pass
 
     app = FastAPI(
         title="Open Spark",
@@ -112,7 +110,8 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         except Exception:
             logging.getLogger("open_spark.access").error(
                 "%s %s -> unhandled",
-                request.method, request.url.path,
+                request.method,
+                request.url.path,
                 extra={"request_id": rid},
                 exc_info=True,
             )
@@ -120,7 +119,10 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         dur_ms = int((time.monotonic() - start) * 1000)
         logging.getLogger("open_spark.access").info(
             "%s %s -> %s (%dms)",
-            request.method, request.url.path, resp.status_code, dur_ms,
+            request.method,
+            request.url.path,
+            resp.status_code,
+            dur_ms,
             extra={"request_id": rid},
         )
         resp.headers["x-request-id"] = rid

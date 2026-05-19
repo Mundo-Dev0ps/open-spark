@@ -6,6 +6,10 @@
 // "obs-websocket", so obs-studio loads us first; by the time the
 // websocket plugin reads its config, it's already what we want.
 //
+// Config path is resolved per-OS (Windows %APPDATA%, macOS
+// ~/Library/Application Support, Linux $XDG_CONFIG_HOME/~/.config);
+// OPENSPARK_OBS_CONFIG_DIR overrides it for containers/portable.
+//
 // Password resolution order:
 //   1. OPENSPARK_OBS_PASSWORD env var (set by docker-compose)
 //   2. existing password if config.json already exists
@@ -30,12 +34,32 @@ namespace {
 
 QString websocket_config_path()
 {
-    // OBS stores plugin config under ${XDG_CONFIG_HOME}/obs-studio/plugin_config
-    // (portable mode just remaps that prefix to <portable>/config).
-    QString base = QString::fromUtf8(qgetenv("XDG_CONFIG_HOME"));
+    // OBS keeps plugin config under <config-root>/obs-studio/plugin_config.
+    // The config-root differs per OS; OPENSPARK_OBS_CONFIG_DIR overrides
+    // it (containers / tests / portable installs).
+    QString base = QString::fromUtf8(qgetenv("OPENSPARK_OBS_CONFIG_DIR"));
+
+#if defined(Q_OS_WIN)
+    // Windows: %APPDATA%\obs-studio\
+    if (base.isEmpty()) {
+        base = QString::fromUtf8(qgetenv("APPDATA"));
+    }
+#elif defined(Q_OS_MACOS)
+    // macOS: ~/Library/Application Support/obs-studio/
+    if (base.isEmpty()) {
+        base = QDir::homePath()
+               + QStringLiteral("/Library/Application Support");
+    }
+#else
+    // Linux: $XDG_CONFIG_HOME or ~/.config (portable remaps this prefix).
+    if (base.isEmpty()) {
+        base = QString::fromUtf8(qgetenv("XDG_CONFIG_HOME"));
+    }
     if (base.isEmpty()) {
         base = QDir::homePath() + QStringLiteral("/.config");
     }
+#endif
+
     return base + QStringLiteral(
         "/obs-studio/plugin_config/obs-websocket/config.json");
 }

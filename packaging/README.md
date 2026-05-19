@@ -34,7 +34,9 @@ flatpak install --user obs-open-spark.flatpak
 The extension auto-mounts into `com.obsproject.Studio` under
 `/app/plugins/OpenSpark/`.
 
-### Portable / manual
+### Portable / manual — per OS
+
+**Linux** (`.so`)
 
 ```bash
 mkdir -p ~/.config/obs-studio/plugins/obs-open-spark/bin/64bit
@@ -42,6 +44,27 @@ cp obs-open-spark.so ~/.config/obs-studio/plugins/obs-open-spark/bin/64bit/
 mkdir -p ~/.config/obs-studio/plugins/obs-open-spark/data/locale
 cp data/locale/*.ini ~/.config/obs-studio/plugins/obs-open-spark/data/locale/
 ```
+
+**Windows** (`.dll`) — PowerShell:
+
+```powershell
+$dst = "$env:APPDATA\obs-studio\plugins\obs-open-spark"
+New-Item -ItemType Directory -Force "$dst\bin\64bit","$dst\data\locale" | Out-Null
+Copy-Item obs-open-spark.dll "$dst\bin\64bit\"
+Copy-Item data\locale\*.ini  "$dst\data\locale\"
+```
+
+**macOS** (`.plugin` bundle):
+
+```bash
+dst=~/"Library/Application Support/obs-studio/plugins"
+mkdir -p "$dst"
+cp -R obs-open-spark.plugin "$dst/"
+```
+
+> The plugin's WebSocket auto-config resolves the OBS config dir per OS
+> (`%APPDATA%` / `~/Library/Application Support` / `$XDG_CONFIG_HOME`).
+> Override with `OPENSPARK_OBS_CONFIG_DIR` for portable/odd setups.
 
 ## Building locally without CI
 

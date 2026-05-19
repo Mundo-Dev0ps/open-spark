@@ -73,26 +73,50 @@ flatpak install --user obs-open-spark.flatpak
 ### 1️⃣ Plugin — Manual _(native OBS install)_
 
 Grab the artifact for your OS from
-[**Releases**](https://github.com/Mundo-Dev0ps/open-spark/releases):
+[**Releases**](https://github.com/Mundo-Dev0ps/open-spark/releases) and
+drop it into OBS's plugin directory:
+
+**🐧 Linux**
 
 ```bash
 # Fedora / RHEL / openSUSE
 sudo dnf install ./obs-open-spark-*.rpm
 # Debian / Ubuntu
 sudo apt install ./obs-open-spark_*.deb
+# Portable (any distro): unpack the .tar.gz into
+~/.config/obs-studio/plugins/obs-open-spark/
 ```
 
-Portable / Windows / macOS — drop the bundle into your OBS plugins dir
-(see [`packaging/README.md`](packaging/README.md)).
+**🪟 Windows** — unzip `obs-open-spark-windows-x86_64.zip` so you get:
+
+```
+%APPDATA%\obs-studio\plugins\obs-open-spark\bin\64bit\obs-open-spark.dll
+%APPDATA%\obs-studio\plugins\obs-open-spark\data\
+```
+
+(or drop it into `C:\Program Files\obs-studio\obs-plugins\64bit\`).
+
+**🍎 macOS** — unpack the tarball into:
+
+```
+~/Library/Application Support/obs-studio/plugins/obs-open-spark.plugin
+```
 
 ### 2️⃣ Backend
 
 The agent needs the local backend running (FastAPI on
-`127.0.0.1:8765`). Easiest:
+`127.0.0.1:8765`). Cross-platform via Python 3.11+:
 
 ```bash
+# Linux / macOS
 pipx install open-spark        # or: pip install --user open-spark
 open-spark                     # serves the agent on :8765
+```
+
+```powershell
+# Windows (PowerShell)
+py -m pip install --user open-spark
+py -m open_spark               # serves the agent on :8765
 ```
 
 > 🐳 Prefer containers, or hacking on the code? A Docker Compose stack is

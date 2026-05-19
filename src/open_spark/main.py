@@ -2,12 +2,16 @@
 
 from __future__ import annotations
 
+import json
 import logging
+import os
+import time
+import uuid
 from contextlib import asynccontextmanager
 from dataclasses import dataclass
 from pathlib import Path
 
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
 from fastapi.responses import RedirectResponse
 from fastapi.staticfiles import StaticFiles
 
@@ -29,11 +33,39 @@ class AppState:
     overlays: OverlayStore
 
 
+class _JsonLogFormatter(logging.Formatter):
+    """One-line JSON per record: ts, level, logger, msg, + request id
+    when the access middleware put one on the record."""
+
+    def format(self, record: logging.LogRecord) -> str:
+        payload = {
+            "ts": self.formatTime(record, "%Y-%m-%dT%H:%M:%S%z"),
+            "level": record.levelname,
+            "logger": record.name,
+            "msg": record.getMessage(),
+        }
+        rid = getattr(record, "request_id", None)
+        if rid:
+            payload["request_id"] = rid
+        if record.exc_info:
+            payload["exc"] = self.formatException(record.exc_info)
+        return json.dumps(payload, default=str)
+
+
 def _setup_logging(level: str) -> None:
-    logging.basicConfig(
-        level=level.upper(),
-        format="%(asctime)s %(levelname)-7s %(name)s :: %(message)s",
-    )
+    root = logging.getLogger()
+    root.setLevel(level.upper())
+    for h in list(root.handlers):
+        root.removeHandler(h)
+    handler = logging.StreamHandler()
+    # JSON in containers / when OPENSPARK_LOG_JSON=1; human format locally.
+    if os.environ.get("OPENSPARK_LOG_JSON", "1").lower() in {"1", "true", "yes"}:
+        handler.setFormatter(_JsonLogFormatter())
+    else:
+        handler.setFormatter(logging.Formatter(
+            "%(asctime)s %(levelname)-7s %(name)s :: %(message)s"
+        ))
+    root.addHandler(handler)
 
 
 def create_app(settings: Settings | None = None) -> FastAPI:
@@ -70,6 +102,29 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         docs_url="/api/docs",
         redoc_url=None,
     )
+
+    @app.middleware("http")
+    async def _access_log(request: Request, call_next):
+        rid = request.headers.get("x-request-id") or uuid.uuid4().hex[:12]
+        start = time.monotonic()
+        try:
+            resp = await call_next(request)
+        except Exception:
+            logging.getLogger("open_spark.access").error(
+                "%s %s -> unhandled",
+                request.method, request.url.path,
+                extra={"request_id": rid},
+                exc_info=True,
+            )
+            raise
+        dur_ms = int((time.monotonic() - start) * 1000)
+        logging.getLogger("open_spark.access").info(
+            "%s %s -> %s (%dms)",
+            request.method, request.url.path, resp.status_code, dur_ms,
+            extra={"request_id": rid},
+        )
+        resp.headers["x-request-id"] = rid
+        return resp
 
     app.include_router(api_router)
 

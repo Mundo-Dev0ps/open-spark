@@ -57,6 +57,24 @@ def _save_user_config(data: dict) -> None:
     USER_CONFIG_PATH.write_text(json.dumps(data, indent=2), encoding="utf-8")
 
 
+@router.get("/healthz")
+async def healthz(request: Request) -> dict:
+    """Liveness/readiness probe. Never raises; reports component state
+    so a supervisor / compose healthcheck can act on it."""
+    state = _state(request)
+    obs_ok = False
+    try:
+        obs_ok = await state.obs.is_connected()
+    except Exception:  # noqa: BLE001
+        obs_ok = False
+    return {
+        "status": "ok",
+        "version": __version__,
+        "obs_connected": obs_ok,
+        "mock_obs": state.settings.mock_obs,
+    }
+
+
 @router.get("/api/status", response_model=StatusResponse)
 async def status(request: Request) -> StatusResponse:
     state = _state(request)

@@ -1,0 +1,22 @@
+# Run `pre-commit install` once; hooks then run on every commit.
+# Mirrors the backend-ci checks so failures surface locally first.
+repos:
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: v0.6.9
+    hooks:
+      - id: ruff
+        args: [--fix]
+        files: ^(src|tests|scripts)/
+      - id: ruff-format
+        files: ^(src|tests|scripts)/
+
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v5.0.0
+    hooks:
+      - id: trailing-whitespace
+      - id: end-of-file-fixer
+      - id: check-yaml
+        exclude: ^packaging/flatpak/   # flatpak-builder uses non-standard tags
+      - id: check-added-large-files
+        args: [--maxkb=512]
+      - id: detect-private-key

@@ -203,10 +203,23 @@ class MockOBSClient:
                 self.scenes.remove(sn)
                 self.scene_items.pop(sn, None)
             return {"ok": True, "mock": True}
+        if rt == "GetSourceScreenshot":
+            # 1x1 transparent PNG so the screenshot tool has bytes.
+            png = (
+                "data:image/png;base64,"
+                "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJ"
+                "AAAAC0lEQVR4nGNgAAIAAAUAAeImBZsAAAAASUVORK5CYII="
+            )
+            return {"imageData": png}
         if rt in (
             "CreateSourceFilter", "SetSourceFilterSettings",
             "RemoveSourceFilter", "SetSceneItemTransform",
             "SetSceneItemEnabled", "SetInputSettings", "CreateScene",
+            "SetInputVolume", "SetInputMute",
+            "StartRecord", "StopRecord", "ToggleRecord",
+            "StartStream", "StopStream", "ToggleStream",
+            "StartVirtualCam", "StopVirtualCam", "ToggleVirtualCam",
+            "TriggerHotkeyByName",
         ):
             return {"ok": True, "mock": True}
         return {"ok": True, "mock": True, "unhandled": rt}

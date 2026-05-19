@@ -679,3 +679,389 @@ async def _t_remove_filter(state, source, filter_name):
         "filterName": filter_name,
     })
     return {"ok": True, "removed": filter_name}
+
+
+# ===========================================================================
+# Phase 4 — audio
+# ===========================================================================
+
+@tool(
+    "set_volume",
+    "Set an audio source's volume in dB (0 = unity, negative = quieter, "
+    "e.g. -6).",
+    {
+        "type": "object",
+        "properties": {
+            "source": {"type": "string"},
+            "db": {"type": "number"},
+        },
+        "required": ["source", "db"],
+    },
+)
+async def _t_set_volume(state, source, db):
+    await state.obs.raw_request("SetInputVolume", {
+        "inputName": source,
+        "inputVolumeDb": float(db),
+    })
+    return {"ok": True, "source": source, "db": db}
+
+
+@tool(
+    "set_mute",
+    "Mute or unmute an audio source.",
+    {
+        "type": "object",
+        "properties": {
+            "source": {"type": "string"},
+            "muted": {"type": "boolean"},
+        },
+        "required": ["source", "muted"],
+    },
+)
+async def _t_set_mute(state, source, muted):
+    await state.obs.raw_request("SetInputMute", {
+        "inputName": source,
+        "inputMuted": bool(muted),
+    })
+    return {"ok": True, "source": source, "muted": bool(muted)}
+
+
+@tool(
+    "add_audio_input",
+    "Add a microphone or desktop-audio capture source to a scene.",
+    {
+        "type": "object",
+        "properties": {
+            "scene": {"type": "string"},
+            "name": {"type": "string", "default": "Mic"},
+            "kind": {"type": "string", "enum": ["mic", "desktop"], "default": "mic"},
+        },
+        "required": ["scene"],
+    },
+)
+async def _t_add_audio_input(state, scene, name="Mic", kind="mic"):
+    if sys.platform == "win32":
+        ik = "wasapi_input_capture" if kind == "mic" else "wasapi_output_capture"
+    elif sys.platform == "darwin":
+        ik = "coreaudio_input_capture" if kind == "mic" else "coreaudio_output_capture"
+    else:
+        ik = "pulse_input_capture" if kind == "mic" else "pulse_output_capture"
+    r = await state.obs.raw_request("CreateInput", {
+        "sceneName": scene,
+        "inputName": name,
+        "inputKind": ik,
+        "inputSettings": {},
+        "sceneItemEnabled": True,
+    })
+    return {"added": name, "kind": ik, "scene_item_id": r.get("sceneItemId")}
+
+
+@tool(
+    "add_audio_filter",
+    "Add an audio filter to a source: noise suppression, gain, or "
+    "compressor.",
+    {
+        "type": "object",
+        "properties": {
+            "source": {"type": "string"},
+            "filter": {"type": "string", "enum": ["noise_suppress", "gain", "compressor"]},
+            "gain_db": {"type": "number", "description": "for filter=gain", "default": 0.0},
+        },
+        "required": ["source", "filter"],
+    },
+)
+async def _t_add_audio_filter(state, source, filter, gain_db=0.0):
+    kinds = {
+        "noise_suppress": ("Noise Suppression", "noise_suppress_filter_v2",
+                           {"method": "rnnoise"}),
+        "gain": ("Gain", "gain_filter", {"db": float(gain_db)}),
+        "compressor": ("Compressor", "compressor_filter", {}),
+    }
+    if filter not in kinds:
+        return {"error": f"unknown audio filter {filter!r}"}
+    fname, fkind, fset = kinds[filter]
+    await state.obs.raw_request("CreateSourceFilter", {
+        "sourceName": source,
+        "filterName": fname,
+        "filterKind": fkind,
+        "filterSettings": fset,
+    })
+    return {"ok": True, "filter": fname}
+
+
+# ===========================================================================
+# Phase 5 — recording / streaming lifecycle
+# ===========================================================================
+
+@tool(
+    "recording_control",
+    "Start, stop or toggle OBS recording.",
+    {
+        "type": "object",
+        "properties": {
+            "action": {"type": "string", "enum": ["start", "stop", "toggle"]},
+        },
+        "required": ["action"],
+    },
+)
+async def _t_recording(state, action):
+    req = {"start": "StartRecord", "stop": "StopRecord",
+           "toggle": "ToggleRecord"}[action]
+    r = await state.obs.raw_request(req)
+    return {"ok": True, "action": action, "result": r}
+
+
+@tool(
+    "streaming_control",
+    "Start, stop or toggle the live stream.",
+    {
+        "type": "object",
+        "properties": {
+            "action": {"type": "string", "enum": ["start", "stop", "toggle"]},
+        },
+        "required": ["action"],
+    },
+    destructive=True,
+)
+async def _t_streaming(state, action):
+    req = {"start": "StartStream", "stop": "StopStream",
+           "toggle": "ToggleStream"}[action]
+    r = await state.obs.raw_request(req)
+    return {"ok": True, "action": action, "result": r}
+
+
+@tool(
+    "virtual_camera_control",
+    "Start/stop/toggle the OBS virtual camera.",
+    {
+        "type": "object",
+        "properties": {
+            "action": {"type": "string", "enum": ["start", "stop", "toggle"]},
+        },
+        "required": ["action"],
+    },
+)
+async def _t_vcam(state, action):
+    req = {"start": "StartVirtualCam", "stop": "StopVirtualCam",
+           "toggle": "ToggleVirtualCam"}[action]
+    r = await state.obs.raw_request(req)
+    return {"ok": True, "action": action, "result": r}
+
+
+# ===========================================================================
+# Phase 6 — semantic placement
+# ===========================================================================
+
+_ANCHORS = {
+    "top-left", "top-center", "top-right",
+    "center-left", "center", "center-right",
+    "bottom-left", "bottom-center", "bottom-right",
+    "fill",
+}
+
+
+@tool(
+    "place_source",
+    "Position+size a scene item by a semantic anchor instead of raw "
+    "pixels. Far more reliable than guessing x/y. 'fill' stretches to "
+    "the whole canvas.",
+    {
+        "type": "object",
+        "properties": {
+            "scene": {"type": "string"},
+            "scene_item_id": {"type": "integer"},
+            "anchor": {
+                "type": "string",
+                "enum": sorted(_ANCHORS),
+            },
+            "width": {"type": "integer", "description": "item width px (not needed for fill)", "default": 480},
+            "height": {"type": "integer", "default": 270},
+            "margin": {"type": "integer", "default": 40},
+            "canvas_w": {"type": "integer", "default": 1920},
+            "canvas_h": {"type": "integer", "default": 1080},
+        },
+        "required": ["scene", "scene_item_id", "anchor"],
+    },
+)
+async def _t_place_source(state, scene, scene_item_id, anchor,
+                          width=480, height=270, margin=40,
+                          canvas_w=1920, canvas_h=1080):
+    if anchor not in _ANCHORS:
+        return {"error": f"unknown anchor {anchor!r}",
+                "valid": sorted(_ANCHORS)}
+    if anchor == "fill":
+        t = {
+            "positionX": 0.0, "positionY": 0.0,
+            "boundsType": "OBS_BOUNDS_STRETCH",
+            "boundsWidth": float(canvas_w), "boundsHeight": float(canvas_h),
+            "alignment": 5,
+        }
+    else:
+        vy, vx = anchor.split("-") if "-" in anchor else (anchor, "center")
+        # x by horizontal token
+        if vx == "left":
+            x = margin
+        elif vx == "right":
+            x = canvas_w - width - margin
+        else:
+            x = (canvas_w - width) // 2
+        # y by vertical token
+        if vy == "top":
+            y = margin
+        elif vy == "bottom":
+            y = canvas_h - height - margin
+        else:
+            y = (canvas_h - height) // 2
+        t = {
+            "positionX": float(x), "positionY": float(y),
+            "boundsType": "OBS_BOUNDS_STRETCH",
+            "boundsWidth": float(width), "boundsHeight": float(height),
+            "alignment": 5,
+        }
+    await state.obs.raw_request("SetSceneItemTransform", {
+        "sceneName": scene,
+        "sceneItemId": int(scene_item_id),
+        "sceneItemTransform": t,
+    })
+    return {"ok": True, "anchor": anchor, "transform": t}
+
+
+# ===========================================================================
+# Phase 7 — vision feedback (screenshot)
+# ===========================================================================
+
+@tool(
+    "screenshot_program",
+    "Capture the current program output as a PNG so you can inspect "
+    "the resulting layout. Returns a URL the user can open; if your "
+    "model is vision-capable you may reason about composition from it.",
+    {
+        "type": "object",
+        "properties": {
+            "width": {"type": "integer", "default": 1280},
+            "height": {"type": "integer", "default": 720},
+        },
+    },
+)
+async def _t_screenshot(state, width=1280, height=720):
+    import base64
+    import uuid
+
+    scene = await state.obs.current_scene_name() or ""
+    r = await state.obs.raw_request("GetSourceScreenshot", {
+        "sourceName": scene,
+        "imageFormat": "png",
+        "imageWidth": int(width),
+        "imageHeight": int(height),
+    })
+    data = r.get("imageData", "")
+    if not data:
+        return {"error": "no image data (OBS may not support screenshot "
+                         "for this source)"}
+    # imageData is "data:image/png;base64,...." — strip the prefix.
+    b64 = data.split(",", 1)[-1]
+    try:
+        raw = base64.b64decode(b64)
+    except Exception:  # noqa: BLE001
+        return {"error": "could not decode screenshot"}
+    fid = uuid.uuid4().hex[:12]
+    path = state.overlays.root / f"shot-{fid}.png"
+    path.write_bytes(raw)
+    return {
+        "ok": True,
+        "url": f"{state.settings.overlay_base_url}/shot-{fid}.png",
+        "scene": scene,
+        "bytes": len(raw),
+    }
+
+
+# ===========================================================================
+# Phase 8 — scene presets
+# ===========================================================================
+
+def _presets_path(state):
+    from .config import app_data_dir
+
+    return app_data_dir() / "scene_presets.json"
+
+
+def _load_presets(state) -> dict:
+    import json as _j
+
+    p = _presets_path(state)
+    if not p.exists():
+        return {}
+    try:
+        return _j.loads(p.read_text(encoding="utf-8"))
+    except Exception:  # noqa: BLE001
+        return {}
+
+
+def _save_presets(state, d: dict) -> None:
+    import json as _j
+
+    p = _presets_path(state)
+    p.parent.mkdir(parents=True, exist_ok=True)
+    p.write_text(_j.dumps(d, indent=2), encoding="utf-8")
+
+
+@tool(
+    "save_scene_preset",
+    "Snapshot a scene's current source list under a preset name so it "
+    "can be recalled later.",
+    {
+        "type": "object",
+        "properties": {
+            "scene": {"type": "string"},
+            "preset_name": {"type": "string"},
+        },
+        "required": ["scene", "preset_name"],
+    },
+)
+async def _t_save_preset(state, scene, preset_name):
+    r = await state.obs.raw_request(
+        "GetSceneItemList", {"sceneName": scene}
+    )
+    items = [
+        {"source": it.get("sourceName"), "id": it.get("sceneItemId")}
+        for it in r.get("sceneItems", [])
+    ]
+    d = _load_presets(state)
+    d[preset_name] = {"scene": scene, "items": items}
+    _save_presets(state, d)
+    return {"ok": True, "preset": preset_name, "item_count": len(items)}
+
+
+@tool(
+    "list_scene_presets",
+    "List saved scene presets.",
+    {"type": "object", "properties": {}},
+)
+async def _t_list_presets(state):
+    d = _load_presets(state)
+    return {"presets": [
+        {"name": k, "scene": v.get("scene"),
+         "items": len(v.get("items", []))}
+        for k, v in d.items()
+    ]}
+
+
+# ===========================================================================
+# Phase 9 — hotkeys
+# ===========================================================================
+
+@tool(
+    "trigger_hotkey",
+    "Trigger an OBS hotkey by its internal name (e.g. "
+    "OBSBasic.StartRecording). Use list-style requests if unsure.",
+    {
+        "type": "object",
+        "properties": {"hotkey_name": {"type": "string"}},
+        "required": ["hotkey_name"],
+    },
+)
+async def _t_trigger_hotkey(state, hotkey_name):
+    await state.obs.raw_request(
+        "TriggerHotkeyByName", {"hotkeyName": hotkey_name}
+    )
+    return {"ok": True, "triggered": hotkey_name}

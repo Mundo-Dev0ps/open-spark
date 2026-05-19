@@ -296,3 +296,53 @@ async def test_delete_scene_tool(settings, tmp_app_dir) -> None:
 def test_delete_scene_is_destructive() -> None:
     t = tools.get_tool("delete_scene")
     assert t is not None and t.destructive is True
+
+
+@pytest.mark.asyncio
+async def test_new_tool_surface(settings, tmp_app_dir) -> None:
+    from open_spark.main import AppState
+    from open_spark.obs_client import MockOBSClient
+    from open_spark.overlays import OverlayStore
+
+    obs = MockOBSClient()
+    await obs.connect()
+    st = AppState(settings=settings, obs=obs,
+                  overlays=OverlayStore(root=tmp_app_dir / "overlays"))
+
+    assert (await tools.dispatch(
+        "set_volume", {"source": "Mic", "db": -6}, st))["ok"]
+    assert (await tools.dispatch(
+        "set_mute", {"source": "Mic", "muted": True}, st))["muted"] is True
+    assert (await tools.dispatch(
+        "add_audio_filter",
+        {"source": "Mic", "filter": "noise_suppress"}, st))["ok"]
+    assert (await tools.dispatch(
+        "recording_control", {"action": "start"}, st))["ok"]
+    assert (await tools.dispatch(
+        "place_source",
+        {"scene": "Scene", "scene_item_id": 1, "anchor": "bottom-right"},
+        st))["anchor"] == "bottom-right"
+    bad = await tools.dispatch(
+        "place_source",
+        {"scene": "S", "scene_item_id": 1, "anchor": "nowhere"}, st)
+    assert "error" in bad
+    shot = await tools.dispatch("screenshot_program", {}, st)
+    assert shot["ok"] and shot["url"].endswith(".png")
+    sp = await tools.dispatch(
+        "save_scene_preset", {"scene": "Scene", "preset_name": "JC"}, st)
+    assert sp["ok"]
+    lp = await tools.dispatch("list_scene_presets", {}, st)
+    assert any(p["name"] == "JC" for p in lp["presets"])
+
+
+def test_streaming_control_is_destructive() -> None:
+    t = tools.get_tool("streaming_control")
+    assert t is not None and t.destructive is True
+
+
+def test_healthz(client) -> None:
+    r = client.get("/healthz")
+    assert r.status_code == 200
+    b = r.json()
+    assert b["status"] == "ok"
+    assert "obs_connected" in b

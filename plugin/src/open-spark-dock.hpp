@@ -83,6 +83,7 @@ private:
     // Settings tab widgets.
     QLineEdit *settingsModelEdit_ = nullptr;
     QLineEdit *settingsAgentModelEdit_ = nullptr;
+    QLabel *settingsAgentModelStatus_ = nullptr;
     QSpinBox *settingsQualitySpin_ = nullptr;
     QLineEdit *settingsLlmBaseEdit_ = nullptr;
     QLineEdit *settingsObsHostEdit_ = nullptr;

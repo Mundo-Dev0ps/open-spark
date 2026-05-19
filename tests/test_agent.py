@@ -222,3 +222,51 @@ def test_agent_tools_catalogue(client) -> None:
     names = {t["name"] for t in r.json()["tools"]}
     assert "add_chroma_key" in names
     assert any(t["destructive"] for t in r.json()["tools"])
+
+
+# --- tool-support validation -------------------------------------------------
+
+def test_tool_support_allowlisted() -> None:
+    ok, _ = agent.tool_support("nvidia_nim/meta/llama-3.3-70b-instruct")
+    assert ok is True
+    ok, _ = agent.tool_support("anthropic/claude-sonnet-4-6")
+    assert ok is True
+
+
+def test_tool_support_rejects_tiny() -> None:
+    ok, reason = agent.tool_support("ollama/llama3.2-1b")
+    assert ok is False
+    assert reason
+
+
+def test_tool_support_unknown_is_none() -> None:
+    ok, _ = agent.tool_support("some/totally-unheard-of-model-xyz")
+    assert ok is None
+
+
+def test_model_check_endpoint(client) -> None:
+    r = client.get(
+        "/api/agent/model-check",
+        params={"model": "nvidia_nim/meta/llama-3.3-70b-instruct"},
+    )
+    assert r.status_code == 200
+    assert r.json()["supported"] is True
+    assert r.json()["suggestions"]
+
+
+def test_agent_chat_rejects_unsupported_model(
+    client, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A clearly tool-incapable model is rejected with 400 + suggestions
+    instead of a cryptic 502 from the provider."""
+    r = client.post(
+        "/api/agent/chat",
+        json={
+            "messages": [{"role": "user", "content": "hi"}],
+            "model": "ollama/llama3.2-1b",
+        },
+    )
+    assert r.status_code == 400, r.text
+    detail = r.json()["detail"]
+    assert "tool calling" in detail["error"]
+    assert detail["suggestions"]

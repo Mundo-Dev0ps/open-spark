@@ -418,6 +418,17 @@ async def agent_chat(
     )
     base_url = user_cfg.get("llm_base_url") or state.settings.llm_base_url or None
 
+    supported, reason = agent.tool_support(model)
+    if supported is False:
+        raise HTTPException(
+            status_code=400,
+            detail={
+                "error": f"model {model!r} does not support tool calling "
+                f"({reason}). The agent needs a tool-calling model.",
+                "suggestions": agent.SUGGESTED_TOOL_MODELS,
+            },
+        )
+
     try:
         res = await agent.run_agent(
             user_messages=[m.model_dump() for m in payload.messages],
@@ -529,6 +540,17 @@ async def agent_chat_stream(request: Request, payload: AgentChatRequest):
     )
     base_url = user_cfg.get("llm_base_url") or state.settings.llm_base_url or None
 
+    supported, reason = agent.tool_support(model)
+    if supported is False:
+        raise HTTPException(
+            status_code=400,
+            detail={
+                "error": f"model {model!r} does not support tool calling "
+                f"({reason}).",
+                "suggestions": agent.SUGGESTED_TOOL_MODELS,
+            },
+        )
+
     async def event_stream():
         try:
             async for ev in agent.stream_agent(
@@ -573,6 +595,22 @@ async def agent_chat_stream(request: Request, payload: AgentChatRequest):
         media_type="text/event-stream",
         headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
     )
+
+
+@router.get("/api/agent/model-check")
+async def agent_model_check(model: str) -> dict:
+    """Validate a model id for tool calling before the user saves it.
+
+    Returns {supported: true|false|null, reason, suggestions}. The
+    plugin Settings tab calls this to show an inline green/red badge.
+    """
+    supported, reason = agent.tool_support(model)
+    return {
+        "model": model,
+        "supported": supported,  # JSON: true / false / null
+        "reason": reason,
+        "suggestions": agent.SUGGESTED_TOOL_MODELS,
+    }
 
 
 @router.get("/api/agent/tools")

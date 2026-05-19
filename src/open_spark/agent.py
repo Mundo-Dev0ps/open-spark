@@ -102,6 +102,73 @@ class AgentResult:
     usage: dict = field(default_factory=dict)
 
 
+# Curated fallback when LiteLLM has no metadata for a model. Substring
+# match against the model id (provider/name). These families reliably
+# support OpenAI-style tool calling.
+_TOOL_OK_SUBSTRINGS = (
+    "anthropic/claude",
+    "openai/gpt-4", "openai/gpt-5", "openai/o1", "openai/o3", "openai/o4",
+    "gemini/gemini-1.5", "gemini/gemini-2",
+    "groq/llama-3.3", "groq/llama-3.1", "groq/qwen",
+    "deepseek/deepseek-chat", "deepseek/deepseek-v3",
+    "mistral/mistral-large", "mistral/mistral-small",
+    "cohere/command-r",
+    # NVIDIA NIM models that expose tool calling
+    "nvidia_nim/meta/llama-3.3", "nvidia_nim/meta/llama-3.1-405",
+    "nvidia_nim/meta/llama-3.1-70", "nvidia_nim/qwen/qwen2.5-72",
+    "nvidia_nim/qwen/qwen2.5-coder-32",
+    "nvidia_nim/mistralai/mistral-large",
+    "nvidia_nim/nvidia/llama-3.1-nemotron-70",
+    # OpenRouter passthrough (provider/model after the openrouter/ prefix)
+    "openrouter/anthropic/claude", "openrouter/openai/gpt-4",
+    "openrouter/meta-llama/llama-3.3", "openrouter/qwen/qwen-2.5-72",
+    "openrouter/qwen/qwen-2.5-coder-32",
+)
+
+# Shown to the user when their pick is rejected.
+SUGGESTED_TOOL_MODELS = [
+    "nvidia_nim/meta/llama-3.3-70b-instruct",
+    "nvidia_nim/qwen/qwen2.5-coder-32b-instruct",
+    "openrouter/qwen/qwen-2.5-coder-32b-instruct:free",
+    "anthropic/claude-sonnet-4-6",
+    "openai/gpt-4o",
+]
+
+
+def tool_support(model: str) -> tuple[bool | None, str]:
+    """Return (supported, reason).
+
+    True  — known to support tool calling
+    False — known NOT to (reject before wasting an LLM call)
+    None  — unknown; allow but caller may warn
+    """
+    if not model:
+        return False, "no model set"
+    m = model.strip().lower()
+
+    # 1. LiteLLM's own metadata is authoritative when present.
+    try:
+        import litellm
+
+        if litellm.supports_function_calling(model=model):
+            return True, "litellm: supports function calling"
+    except Exception:  # noqa: BLE001 — unknown model / no metadata
+        pass
+
+    # 2. Curated substring allowlist.
+    for s in _TOOL_OK_SUBSTRINGS:
+        if s in m:
+            return True, f"allowlisted family ({s})"
+
+    # 3. Obvious red flags — tiny / base models that don't tool-call.
+    for bad in ("ollama/", "-1b", "-1.5b", "-2b", "-3b", "-7b-base",
+                "embed", "tinyllama", "phi-2"):
+        if bad in m:
+            return False, f"likely no tool calling ({bad})"
+
+    return None, "unknown model — tool calling not verified"
+
+
 def _coerce_args(raw: Any) -> dict:
     if isinstance(raw, dict):
         return raw

@@ -670,7 +670,45 @@ QWidget *OpenSparkDock::buildSettingsTab()
     settingsAgentModelEdit_->setPlaceholderText(QStringLiteral(
         "(optional) strong tool-calling model for the Agent — "
         "blank = Default model"));
-    llmForm->addRow(QStringLiteral("Agent model:"), settingsAgentModelEdit_);
+    auto *agentModelRow = new QWidget(llmBox);
+    auto *amrl = new QHBoxLayout(agentModelRow);
+    amrl->setContentsMargins(0, 0, 0, 0);
+    amrl->addWidget(settingsAgentModelEdit_, 1);
+    settingsAgentModelStatus_ = new QLabel(QString(), agentModelRow);
+    settingsAgentModelStatus_->setMinimumWidth(90);
+    amrl->addWidget(settingsAgentModelStatus_);
+    llmForm->addRow(QStringLiteral("Agent model:"), agentModelRow);
+
+    // Validate tool-calling support when the user finishes editing the
+    // field, so they don't save a model the agent can't use.
+    QObject::connect(
+        settingsAgentModelEdit_, &QLineEdit::editingFinished, this, [this]() {
+            const QString m = settingsAgentModelEdit_->text().trimmed();
+            if (m.isEmpty()) {
+                settingsAgentModelStatus_->setText(
+                    QStringLiteral("<span style='color:#8a8f9c'>= Default</span>"));
+                return;
+            }
+            settingsAgentModelStatus_->setText(
+                QStringLiteral("<span style='color:#8a8f9c'>checking…</span>"));
+            http_->getJson(
+                QStringLiteral("/api/agent/model-check?model=%1")
+                    .arg(QString::fromUtf8(QUrl::toPercentEncoding(m))),
+                [this](const openspark::HttpResult &r) {
+                    if (!r.ok) return;
+                    const auto o = QJsonDocument::fromJson(r.body).object();
+                    const QJsonValue sup = o.value("supported");
+                    QString html;
+                    if (sup.isBool() && sup.toBool()) {
+                        html = "<span style='color:#39ff8a'>✓ tool-ready</span>";
+                    } else if (sup.isBool() && !sup.toBool()) {
+                        html = "<span style='color:#ff5470'>✗ no tools</span>";
+                    } else {
+                        html = "<span style='color:#ffb14a'>? unverified</span>";
+                    }
+                    settingsAgentModelStatus_->setText(html);
+                });
+        });
 
     settingsQualitySpin_ = new QSpinBox(llmBox);
     settingsQualitySpin_->setRange(1, 3);

@@ -84,24 +84,38 @@ jobs:
           echo "version=$v" >> "$GITHUB_OUTPUT"
 
       - name: Build .rpm and .deb via fpm
+        # Split per target: rpm doesn't understand Debian's `a | b`
+        # alternation syntax in Requires:, so rpmbuild fails. Each
+        # distro family also names the Qt6 runtime packages differently.
         run: |
           sudo gem install --no-document fpm
-          for kind in rpm deb; do
-            fpm -s dir -t $kind \
-                -n obs-open-spark \
-                -v "${{ steps.ver.outputs.version }}" \
-                --description "Open Spark — native OBS plugin (Qt dock + HTTP bridge to the Open Spark Python backend)." \
-                --url "https://github.com/${{ github.repository }}" \
-                --license MIT \
-                --maintainer "Open Spark Contributors" \
-                --architecture x86_64 \
-                --depends obs-studio \
-                --depends "libqt6core6 | libqt6core6t64" \
-                --depends "libqt6widgets6 | libqt6widgets6t64" \
-                --depends "libqt6network6 | libqt6network6t64" \
-                -C stage \
-                usr
-          done
+          VER="${{ steps.ver.outputs.version }}"
+          DESC="Open Spark — native OBS plugin (Qt dock + HTTP bridge to the Open Spark Python backend)."
+          URL="https://github.com/${{ github.repository }}"
+
+          # --- rpm (Fedora / RHEL / openSUSE) ---
+          fpm -s dir -t rpm \
+              -n obs-open-spark -v "$VER" \
+              --description "$DESC" --url "$URL" --license MIT \
+              --maintainer "Open Spark Contributors" \
+              --architecture x86_64 \
+              --depends obs-studio \
+              --depends qt6-qtbase \
+              --depends qt6-qtbase-gui \
+              -C stage usr
+
+          # --- deb (Debian / Ubuntu) ---
+          fpm -s dir -t deb \
+              -n obs-open-spark -v "$VER" \
+              --description "$DESC" --url "$URL" --license MIT \
+              --maintainer "Open Spark Contributors" \
+              --architecture amd64 \
+              --depends obs-studio \
+              --depends "libqt6core6 | libqt6core6t64" \
+              --depends "libqt6widgets6 | libqt6widgets6t64" \
+              --depends "libqt6network6 | libqt6network6t64" \
+              -C stage usr
+
           mkdir -p packaging-out
           mv *.rpm *.deb packaging-out/
 
@@ -141,6 +155,11 @@ jobs:
   windows:
     name: Windows x86_64
     runs-on: windows-2022
+    # TODO: replace the hardcoded obs-studio release URL fetch with a
+    # proper OBS dev-SDK strategy (obs-deps or obs-plugintemplate
+    # helpers). Today the asset URL is stale (404), so this job is
+    # allowed to fail without blocking the release.
+    continue-on-error: true
     env:
       OBS_DEPS_VERSION: "2024-09-30"
     steps:
@@ -206,6 +225,10 @@ jobs:
   macos:
     name: macOS universal
     runs-on: macos-14
+    # TODO: same as the windows job — the obs-studio macOS asset URL is
+    # stale; needs an obs-deps / obs-plugintemplate-based fetch. Allowed
+    # to fail so the release can still publish Linux + Flatpak.
+    continue-on-error: true
     steps:
       - name: Checkout
         uses: actions/checkout@v4

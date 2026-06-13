@@ -9,9 +9,14 @@
 #       packaging/flatpak/com.obsproject.Studio.Plugin.OpenSpark.local.yml
 
 id: com.obsproject.Studio.Plugin.OpenSpark
-runtime: org.kde.Platform
-runtime-version: "6.7"
-sdk: org.kde.Sdk
+# Match the currently-published com.obsproject.Studio Flatpak (Freedesktop
+# Platform 25.08 as of 2026).
+runtime: org.freedesktop.Platform
+runtime-version: "25.08"
+sdk: org.freedesktop.Sdk
+
+base: com.obsproject.Studio
+base-version: stable
 
 build-extension: true
 appstream-compose: true

@@ -15,9 +15,17 @@
 #   flatpak info -m com.obsproject.Studio | grep runtime
 
 id: com.obsproject.Studio.Plugin.OpenSpark
-runtime: org.kde.Platform
-runtime-version: "6.7"
-sdk: org.kde.Sdk
+# Must match the runtime/sdk the currently-published com.obsproject.Studio
+# Flatpak ships against. As of 2026: Freedesktop 25.08. Verify before
+# submitting:  flatpak info -m com.obsproject.Studio | grep -i runtime
+runtime: org.freedesktop.Platform
+runtime-version: "25.08"
+sdk: org.freedesktop.Sdk
+
+# Compose against the OBS Studio Flatpak so its extension point
+# `com.obsproject.Studio.Plugin` is visible to flatpak-builder.
+base: com.obsproject.Studio
+base-version: stable
 
 build-extension: true
 appstream-compose: true
